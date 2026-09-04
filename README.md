@@ -3,10 +3,10 @@
 Actionable PID departure information for the terminal and, soon, the Omarchy
 top bar.
 
-The project is being built incrementally. The workspace currently provides
-portable user configuration, departure ranking, and a defensive adapter for
-PID's departure-board endpoint. CLI output and the Omarchy plugin will arrive
-in focused follow-up pull requests.
+The project is being built incrementally. The workspace currently provides a
+working CLI with portable user configuration, departure ranking, and a
+defensive adapter for PID's departure-board endpoint. Caching and the Omarchy
+plugin will arrive in focused follow-up pull requests.
 
 The departure endpoint is not officially specified. Its observed contract is
 documented in [`docs/pid-api.md`](docs/pid-api.md).
@@ -32,6 +32,79 @@ the next source.
 Create a commented starter configuration with `pidjezdy config init`, then
 validate it with `pidjezdy config check`. Initialization never overwrites an
 existing file.
+
+The main settings are:
+
+- `display.max_departures`: default number of results to show, from 1 to 20.
+- `fetch.minutes_after`: future window requested from PID, in minutes.
+- `fetch.api_limit`: result limit applied independently to each configured
+  boarding point, from 1 to 20.
+- `boarding_points`: one entry per place and walking route you could use. Each
+  entry has a display `name`, one or more PID platform `stop_ids`, walking
+  time, safety buffer, and accepted line/headsign pairs.
+
+For example:
+
+```toml
+[display]
+max_departures = 3
+
+[fetch]
+minutes_after = 120
+api_limit = 20
+
+[[boarding_points]]
+name = "Nearby stop"
+stop_ids = ["U123Z1P", "U123Z2P"]
+walking_minutes = 4
+safety_buffer_minutes = 2
+
+[[boarding_points.routes]]
+line = "123"
+headsign = "City centre"
+```
+
+Line and headsign matching is exact after surrounding whitespace is removed.
+Keep separate boarding-point entries when platforms have different walking
+times, even if they share a passenger-facing stop name.
+
+## Departure queries
+
+Show the configured number of reachable departures with:
+
+```console
+pidjezdy departures
+```
+
+Text output is compact and rounds time down conservatively:
+
+```text
+123 → City centre · Nearby stop · platform A · leave in 4 min · departs in 10 min
+```
+
+Override the configured count for one invocation with `--limit`:
+
+```console
+pidjezdy departures --limit 2
+```
+
+A departure is reachable when its predicted time, or scheduled time when no
+prediction exists, leaves at least the configured walking time plus safety
+buffer. Cancelled, unmatched, and already-unreachable departures are omitted.
+When the same trip serves multiple configured boarding points, the CLI keeps
+the option that leaves the most time to reach it.
+
+For scripts and the future Omarchy plugin, request JSON instead of parsing the
+human-readable text:
+
+```console
+pidjezdy departures --format json
+```
+
+The JSON document contains `generated_at`, a `stale` flag, and a `departures`
+array. Live responses currently set `stale` to `false`; the field is reserved
+for the planned cache fallback. Relative times are also included as exact
+seconds so consumers do not need to infer them from rounded labels.
 
 ## Development
 
