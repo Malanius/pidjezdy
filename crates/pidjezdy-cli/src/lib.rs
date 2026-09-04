@@ -9,6 +9,7 @@ use pidjezdy_core::config::{Config, ConfigError};
 use pidjezdy_pid::{PidClientError, PidRequestError};
 use thiserror::Error;
 
+mod cache;
 mod departures;
 mod output;
 
@@ -112,22 +113,38 @@ pub enum AppError {
     InvalidConfig { path: PathBuf, source: ConfigError },
     #[error("could not build PID departure request: {0}")]
     DepartureRequest(#[source] PidRequestError),
-    #[error("could not create PID client: {0}")]
-    CreatePidClient(#[source] PidClientError),
-    #[error("could not fetch PID departures: {0}")]
-    FetchDepartures(#[source] PidClientError),
+    #[error("could not create PID client: {source}; cached fallback unavailable: {cache}")]
+    CreatePidClient {
+        source: PidClientError,
+        cache: String,
+    },
+    #[error("could not fetch PID departures: {source}; cached fallback unavailable: {cache}")]
+    FetchDepartures {
+        source: PidClientError,
+        cache: String,
+    },
     #[error("could not serialize JSON output: {0}")]
     SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
     WriteOutput(#[source] std::io::Error),
+    #[error("could not write command diagnostics: {0}")]
+    WriteDiagnostics(#[source] std::io::Error),
 }
 
 impl From<DepartureQueryError> for AppError {
     fn from(error: DepartureQueryError) -> Self {
         match error {
             DepartureQueryError::Request(source) => Self::DepartureRequest(source),
-            DepartureQueryError::CreateClient(source) => Self::CreatePidClient(source),
-            DepartureQueryError::Fetch(source) => Self::FetchDepartures(source),
+            DepartureQueryError::Unavailable { live, cache } => match live {
+                departures::LiveDepartureError::CreateClient(source) => Self::CreatePidClient {
+                    source,
+                    cache: cache.to_string(),
+                },
+                departures::LiveDepartureError::Fetch(source) => Self::FetchDepartures {
+                    source,
+                    cache: cache.to_string(),
+                },
+            },
         }
     }
 }
@@ -149,7 +166,12 @@ impl From<OutputError> for AppError {
 pub fn run_from_env() -> Result<(), AppError> {
     let cli = Cli::parse();
     let env_path = env::var_os(CONFIG_ENV).map(PathBuf::from);
-    run(cli, env_path.as_deref(), &mut std::io::stdout())
+    run(
+        cli,
+        env_path.as_deref(),
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    )
 }
 
 /// Resolve the configuration path without reading it.
@@ -175,13 +197,29 @@ pub fn resolve_config_path(
         .ok_or(AppError::ConfigDirectoryUnavailable)
 }
 
-fn run(cli: Cli, env_path: Option<&Path>, output: &mut impl Write) -> Result<(), AppError> {
+fn run(
+    cli: Cli,
+    env_path: Option<&Path>,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> Result<(), AppError> {
     let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
         Command::Departures { limit, format } => {
             let config = load_config(&path)?;
             let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
-            write_departures(output, format, query.generated_at, &query.departures)?;
+            if let Some(warning) = query.cache_warning {
+                writeln!(diagnostics, "pidjezdy: warning: {warning}")
+                    .map_err(AppError::WriteDiagnostics)?;
+            }
+            write_departures(
+                output,
+                format,
+                query.generated_at,
+                query.data_updated_at,
+                query.stale,
+                &query.departures,
+            )?;
             Ok(())
         }
         Command::Config { command } => match command {
@@ -307,8 +345,9 @@ mod tests {
         ])
         .unwrap();
         let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
 
-        run(cli, None, &mut output).unwrap();
+        run(cli, None, &mut output, &mut diagnostics).unwrap();
 
         assert!(
             String::from_utf8(output)
