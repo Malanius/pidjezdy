@@ -24,6 +24,7 @@ pub(crate) enum OutputError {
 #[derive(Serialize)]
 struct JsonOutput<'a> {
     generated_at: DateTime<Utc>,
+    data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &'a [SelectedDeparture],
 }
@@ -37,14 +38,19 @@ pub(crate) fn write_departures(
     output: &mut impl Write,
     format: OutputFormat,
     generated_at: DateTime<Utc>,
+    data_updated_at: DateTime<Utc>,
+    stale: bool,
     departures: &[SelectedDeparture],
 ) -> Result<(), OutputError> {
     match format {
-        OutputFormat::Text => write_text(output, departures)?,
+        OutputFormat::Text => {
+            write_text(output, generated_at, data_updated_at, stale, departures)?;
+        }
         OutputFormat::Json => {
             let document = serde_json::to_string(&JsonOutput {
                 generated_at,
-                stale: false,
+                data_updated_at,
+                stale,
                 departures,
             })?;
             writeln!(output, "{document}")?;
@@ -55,8 +61,15 @@ pub(crate) fn write_departures(
 
 fn write_text(
     output: &mut impl Write,
+    generated_at: DateTime<Utc>,
+    data_updated_at: DateTime<Utc>,
+    stale: bool,
     departures: &[SelectedDeparture],
 ) -> Result<(), std::io::Error> {
+    if stale {
+        let age_minutes = (generated_at - data_updated_at).num_minutes().max(0);
+        writeln!(output, "STALE · data updated {age_minutes} min ago")?;
+    }
     if departures.is_empty() {
         return writeln!(output, "No reachable departures.");
     }
@@ -126,7 +139,15 @@ mod tests {
     #[test]
     fn text_output_is_compact_and_conservative() {
         let mut output = Vec::new();
-        write_departures(&mut output, OutputFormat::Text, now(), &[selected()]).unwrap();
+        write_departures(
+            &mut output,
+            OutputFormat::Text,
+            now(),
+            now(),
+            false,
+            &[selected()],
+        )
+        .unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
@@ -139,11 +160,19 @@ mod tests {
         let mut departure = selected();
         departure.leave_in_seconds = 59;
         let mut output = Vec::new();
-        write_departures(&mut output, OutputFormat::Text, now(), &[departure]).unwrap();
+        write_departures(
+            &mut output,
+            OutputFormat::Text,
+            now(),
+            now(),
+            false,
+            &[departure],
+        )
+        .unwrap();
         assert!(String::from_utf8(output).unwrap().contains("leave now"));
 
         let mut empty = Vec::new();
-        write_departures(&mut empty, OutputFormat::Text, now(), &[]).unwrap();
+        write_departures(&mut empty, OutputFormat::Text, now(), now(), false, &[]).unwrap();
         assert_eq!(
             String::from_utf8(empty).unwrap(),
             "No reachable departures.\n"
@@ -153,12 +182,41 @@ mod tests {
     #[test]
     fn json_output_has_a_machine_readable_envelope() {
         let mut output = Vec::new();
-        write_departures(&mut output, OutputFormat::Json, now(), &[selected()]).unwrap();
+        write_departures(
+            &mut output,
+            OutputFormat::Json,
+            now(),
+            now() - TimeDelta::minutes(3),
+            true,
+            &[selected()],
+        )
+        .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
 
         assert_eq!(json["generated_at"], "2026-09-04T10:00:00Z");
-        assert_eq!(json["stale"], false);
+        assert_eq!(json["data_updated_at"], "2026-09-04T09:57:00Z");
+        assert_eq!(json["stale"], true);
         assert_eq!(json["departures"][0]["departure"]["line"], "158");
         assert_eq!(json["departures"][0]["leave_in_seconds"], 270);
+    }
+
+    #[test]
+    fn text_output_labels_stale_data_with_its_age() {
+        let mut output = Vec::new();
+        write_departures(
+            &mut output,
+            OutputFormat::Text,
+            now(),
+            now() - TimeDelta::seconds(190),
+            true,
+            &[selected()],
+        )
+        .unwrap();
+
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .starts_with("STALE · data updated 3 min ago\n")
+        );
     }
 }

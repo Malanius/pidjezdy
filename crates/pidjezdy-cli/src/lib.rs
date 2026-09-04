@@ -113,10 +113,16 @@ pub enum AppError {
     InvalidConfig { path: PathBuf, source: ConfigError },
     #[error("could not build PID departure request: {0}")]
     DepartureRequest(#[source] PidRequestError),
-    #[error("could not create PID client: {0}")]
-    CreatePidClient(#[source] PidClientError),
-    #[error("could not fetch PID departures: {0}")]
-    FetchDepartures(#[source] PidClientError),
+    #[error("could not create PID client: {source}; cached fallback unavailable: {cache}")]
+    CreatePidClient {
+        source: PidClientError,
+        cache: String,
+    },
+    #[error("could not fetch PID departures: {source}; cached fallback unavailable: {cache}")]
+    FetchDepartures {
+        source: PidClientError,
+        cache: String,
+    },
     #[error("could not serialize JSON output: {0}")]
     SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
@@ -129,8 +135,16 @@ impl From<DepartureQueryError> for AppError {
     fn from(error: DepartureQueryError) -> Self {
         match error {
             DepartureQueryError::Request(source) => Self::DepartureRequest(source),
-            DepartureQueryError::CreateClient(source) => Self::CreatePidClient(source),
-            DepartureQueryError::Fetch(source) => Self::FetchDepartures(source),
+            DepartureQueryError::Unavailable { live, cache } => match live {
+                departures::LiveDepartureError::CreateClient(source) => Self::CreatePidClient {
+                    source,
+                    cache: cache.to_string(),
+                },
+                departures::LiveDepartureError::Fetch(source) => Self::FetchDepartures {
+                    source,
+                    cache: cache.to_string(),
+                },
+            },
         }
     }
 }
@@ -198,7 +212,14 @@ fn run(
                 writeln!(diagnostics, "pidjezdy: warning: {warning}")
                     .map_err(AppError::WriteDiagnostics)?;
             }
-            write_departures(output, format, query.generated_at, &query.departures)?;
+            write_departures(
+                output,
+                format,
+                query.generated_at,
+                query.data_updated_at,
+                query.stale,
+                &query.departures,
+            )?;
             Ok(())
         }
         Command::Config { command } => match command {

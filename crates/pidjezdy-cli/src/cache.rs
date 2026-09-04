@@ -14,11 +14,18 @@ const CACHE_FILE: &str = "departures.json";
 const CACHE_VERSION: u8 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CacheFile {
     version: u8,
     fetched_at: DateTime<Utc>,
     config: Config,
     departures: Vec<Departure>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CacheSnapshot {
+    pub(crate) fetched_at: DateTime<Utc>,
+    pub(crate) departures: Vec<Departure>,
 }
 
 #[derive(Debug, Error)]
@@ -48,6 +55,23 @@ pub(crate) enum CacheWriteError {
     },
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum CacheReadError {
+    #[error("could not determine the platform cache directory")]
+    DirectoryUnavailable,
+    #[error("could not read departure cache {path}: {source}")]
+    Read {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("could not deserialize departure cache: {0}")]
+    Deserialize(#[source] serde_json::Error),
+    #[error("departure cache uses unsupported version {0}")]
+    UnsupportedVersion(u8),
+    #[error("departure cache belongs to a different configuration")]
+    ConfigMismatch,
+}
+
 pub(crate) fn write_snapshot(
     config: &Config,
     fetched_at: DateTime<Utc>,
@@ -55,6 +79,11 @@ pub(crate) fn write_snapshot(
 ) -> Result<(), CacheWriteError> {
     let path = default_cache_path().ok_or(CacheWriteError::DirectoryUnavailable)?;
     write_snapshot_to(&path, config, fetched_at, departures)
+}
+
+pub(crate) fn read_snapshot(config: &Config) -> Result<CacheSnapshot, CacheReadError> {
+    let path = default_cache_path().ok_or(CacheReadError::DirectoryUnavailable)?;
+    read_snapshot_from(&path, config)
 }
 
 fn default_cache_path() -> Option<PathBuf> {
@@ -102,6 +131,24 @@ fn write_snapshot_to(
             source: error.error,
         })?;
     Ok(())
+}
+
+fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, CacheReadError> {
+    let input = fs::read(path).map_err(|source| CacheReadError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let cached: CacheFile = serde_json::from_slice(&input).map_err(CacheReadError::Deserialize)?;
+    if cached.version != CACHE_VERSION {
+        return Err(CacheReadError::UnsupportedVersion(cached.version));
+    }
+    if cached.config != *config {
+        return Err(CacheReadError::ConfigMismatch);
+    }
+    Ok(CacheSnapshot {
+        fetched_at: cached.fetched_at,
+        departures: cached.departures,
+    })
 }
 
 #[cfg(test)]
@@ -168,5 +215,33 @@ mod tests {
         assert_eq!(cached.config, config());
         assert_eq!(cached.departures[0].trip_id, "new");
         assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn reads_only_matching_supported_snapshots() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("departures.json");
+        let configured = config();
+        write_snapshot_to(&path, &configured, now(), &[departure("cached")]).unwrap();
+
+        let cached = read_snapshot_from(&path, &configured).unwrap();
+        assert_eq!(cached.fetched_at, now());
+        assert_eq!(cached.departures[0].trip_id, "cached");
+
+        let mut other_config = configured.clone();
+        other_config.boarding_points[0].walking_minutes = 5;
+        assert!(matches!(
+            read_snapshot_from(&path, &other_config),
+            Err(CacheReadError::ConfigMismatch)
+        ));
+
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        document["version"] = 2.into();
+        fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+        assert!(matches!(
+            read_snapshot_from(&path, &configured),
+            Err(CacheReadError::UnsupportedVersion(2))
+        ));
     }
 }
