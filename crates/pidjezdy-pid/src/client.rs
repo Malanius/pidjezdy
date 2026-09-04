@@ -14,6 +14,7 @@ use crate::response::{PidResponseError, parse_response};
 pub const DEFAULT_ENDPOINT: &str = "https://data.pid.cz/departures/data.php";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 pub struct PidClient {
     http: Client,
@@ -52,7 +53,7 @@ impl PidClient {
     ///
     /// Returns transport, HTTP status, compression, or PID response errors.
     pub fn fetch(&self, request: &DepartureBoardRequest) -> Result<Vec<Departure>, PidClientError> {
-        let response = self
+        let mut response = self
             .http
             .get(request.url(&self.endpoint))
             // PID sometimes compresses this response despite an identity
@@ -62,7 +63,11 @@ impl PidClient {
             .send()
             .map_err(PidClientError::Send)?;
         let status = response.status();
-        let body = response.bytes().map_err(PidClientError::ReadBody)?;
+        let body = read_at_most(&mut response, MAX_BODY_BYTES)
+            .map_err(PidClientError::ReadBody)?
+            .ok_or(PidClientError::ResponseTooLarge {
+                limit: MAX_BODY_BYTES,
+            })?;
         let decoded = decode_body(&body)?;
 
         if !status.is_success() {
@@ -76,22 +81,24 @@ impl PidClient {
     }
 }
 
-impl Default for PidClient {
-    fn default() -> Self {
-        Self::new().expect("the built-in PID endpoint and HTTP client must be valid")
-    }
-}
-
 fn decode_body(body: &[u8]) -> Result<Vec<u8>, PidClientError> {
     if body.starts_with(&GZIP_MAGIC) {
-        let mut decoded = Vec::new();
-        GzDecoder::new(body)
-            .read_to_end(&mut decoded)
-            .map_err(PidClientError::Decompress)?;
-        Ok(decoded)
+        read_at_most(GzDecoder::new(body), MAX_BODY_BYTES)
+            .map_err(PidClientError::Decompress)?
+            .ok_or(PidClientError::ResponseTooLarge {
+                limit: MAX_BODY_BYTES,
+            })
     } else {
         Ok(body.to_vec())
     }
+}
+
+fn read_at_most(reader: impl Read, limit: usize) -> Result<Option<Vec<u8>>, std::io::Error> {
+    let mut bytes = Vec::new();
+    reader
+        .take(u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    Ok((bytes.len() <= limit).then_some(bytes))
 }
 
 #[derive(Debug, Error)]
@@ -103,7 +110,9 @@ pub enum PidClientError {
     #[error("PID request failed: {0}")]
     Send(reqwest::Error),
     #[error("could not read PID response: {0}")]
-    ReadBody(reqwest::Error),
+    ReadBody(std::io::Error),
+    #[error("PID response exceeded the {limit}-byte body limit")]
+    ResponseTooLarge { limit: usize },
     #[error("PID returned HTTP {status}: {body}")]
     HttpStatus { status: u16, body: String },
     #[error("could not decompress PID response: {0}")]
@@ -141,6 +150,26 @@ mod tests {
         assert!(matches!(
             decode_body(&[GZIP_MAGIC[0], GZIP_MAGIC[1], 0, 1, 2]),
             Err(PidClientError::Decompress(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_oversized_raw_and_decompressed_bodies() {
+        let oversized = vec![b' '; MAX_BODY_BYTES + 1];
+        assert!(
+            read_at_most(oversized.as_slice(), MAX_BODY_BYTES)
+                .unwrap()
+                .is_none()
+        );
+
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&oversized).unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert!(matches!(
+            decode_body(&compressed),
+            Err(PidClientError::ResponseTooLarge {
+                limit: MAX_BODY_BYTES
+            })
         ));
     }
 
