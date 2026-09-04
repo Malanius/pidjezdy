@@ -8,14 +8,16 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+chrono.workspace = true
 clap.workspace = true
 directories.workspace = true
 pidjezdy-core = { path = "../pidjezdy-core" }
+pidjezdy-pid = { path = "../pidjezdy-pid" }
 thiserror.workspace = true
 
 [dev-dependencies]
 tempfile = "3.23.0"
+url.workspace = true
 
 [lints]
 workspace = true
-

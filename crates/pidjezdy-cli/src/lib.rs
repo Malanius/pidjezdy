@@ -8,6 +8,8 @@ use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
 use thiserror::Error;
 
+pub mod departures;
+
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
 const CONFIG_FILE: &str = "config.toml";
 
