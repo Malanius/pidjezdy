@@ -1,0 +1,21 @@
+[package]
+name = "pidjezdy"
+description = "Actionable PID departure information"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+clap.workspace = true
+directories.workspace = true
+pidjezdy-core = { path = "../pidjezdy-core" }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3.23.0"
+
+[lints]
+workspace = true
+
