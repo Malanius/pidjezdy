@@ -22,7 +22,7 @@ impl DepartureBoardRequest {
     pub fn new(
         minutes_after: u32,
         limit: usize,
-        stop_groups: Vec<Vec<String>>,
+        mut stop_groups: Vec<Vec<String>>,
     ) -> Result<Self, PidRequestError> {
         if minutes_after == 0 {
             return Err(PidRequestError::EmptyTimeWindow);
@@ -33,12 +33,13 @@ impl DepartureBoardRequest {
         if stop_groups.is_empty() {
             return Err(PidRequestError::NoStopGroups);
         }
-        for (group_index, group) in stop_groups.iter().enumerate() {
+        for (group_index, group) in stop_groups.iter_mut().enumerate() {
             if group.is_empty() {
                 return Err(PidRequestError::EmptyStopGroup(group_index));
             }
-            for (stop_index, stop_id) in group.iter().enumerate() {
-                if stop_id.trim().is_empty() {
+            for (stop_index, stop_id) in group.iter_mut().enumerate() {
+                *stop_id = stop_id.trim().to_owned();
+                if stop_id.is_empty() {
                     return Err(PidRequestError::EmptyStopId {
                         group: group_index,
                         stop: stop_index,
@@ -93,7 +94,7 @@ mod tests {
             120,
             20,
             vec![
-                vec!["U100Z1P".into()],
+                vec![" U100Z1P ".into()],
                 vec!["U200Z2P".into(), "U200Z3P".into()],
             ],
         )
