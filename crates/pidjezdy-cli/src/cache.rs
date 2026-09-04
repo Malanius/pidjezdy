@@ -103,7 +103,7 @@ fn write_snapshot_to(
     fetched_at: DateTime<Utc>,
     departures: &[Departure],
 ) -> Result<(), CacheWriteError> {
-    let directory = path.parent().unwrap_or_else(|| Path::new("."));
+    let directory = cache_directory(path);
     fs::create_dir_all(directory).map_err(|source| CacheWriteError::CreateDirectory {
         path: directory.to_owned(),
         source,
@@ -149,6 +149,12 @@ fn write_snapshot_to(
             source: error.error,
         })?;
     Ok(())
+}
+
+fn cache_directory(path: &Path) -> &Path {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
 }
 
 fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, CacheReadError> {
@@ -291,5 +297,17 @@ mod tests {
                 limit: MAX_CACHE_BYTES
             })
         ));
+    }
+
+    #[test]
+    fn treats_an_empty_relative_parent_as_the_current_directory() {
+        assert_eq!(
+            cache_directory(Path::new("departures.json")),
+            Path::new(".")
+        );
+        assert_eq!(
+            cache_directory(Path::new("cache/departures.json")),
+            Path::new("cache")
+        );
     }
 }

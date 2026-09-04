@@ -165,7 +165,7 @@ mod tests {
 
     fn live_error() -> LiveDepartureError {
         let error = PidClient::with_endpoint("not a URL").err().unwrap();
-        LiveDepartureError::Fetch(error)
+        LiveDepartureError::CreateClient(error)
     }
 
     #[test]
