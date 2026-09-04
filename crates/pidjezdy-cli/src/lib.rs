@@ -119,7 +119,7 @@ pub enum AppError {
     #[error("could not serialize JSON output: {0}")]
     SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
-    WriteOutput(std::io::Error),
+    WriteOutput(#[source] std::io::Error),
 }
 
 impl From<DepartureQueryError> for AppError {
@@ -340,5 +340,11 @@ mod tests {
                 .to_string();
             assert!(error.contains("limit must be an integer between 1 and 20"));
         }
+    }
+
+    #[test]
+    fn output_errors_preserve_the_io_error_source() {
+        let error = AppError::WriteOutput(std::io::Error::other("closed output"));
+        assert!(std::error::Error::source(&error).is_some());
     }
 }
