@@ -9,6 +9,7 @@ use pidjezdy_core::config::{Config, ConfigError};
 use pidjezdy_pid::{PidClientError, PidRequestError};
 use thiserror::Error;
 
+mod cache;
 mod departures;
 mod output;
 
@@ -120,6 +121,8 @@ pub enum AppError {
     SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
     WriteOutput(#[source] std::io::Error),
+    #[error("could not write command diagnostics: {0}")]
+    WriteDiagnostics(#[source] std::io::Error),
 }
 
 impl From<DepartureQueryError> for AppError {
@@ -149,7 +152,12 @@ impl From<OutputError> for AppError {
 pub fn run_from_env() -> Result<(), AppError> {
     let cli = Cli::parse();
     let env_path = env::var_os(CONFIG_ENV).map(PathBuf::from);
-    run(cli, env_path.as_deref(), &mut std::io::stdout())
+    run(
+        cli,
+        env_path.as_deref(),
+        &mut std::io::stdout(),
+        &mut std::io::stderr(),
+    )
 }
 
 /// Resolve the configuration path without reading it.
@@ -175,12 +183,21 @@ pub fn resolve_config_path(
         .ok_or(AppError::ConfigDirectoryUnavailable)
 }
 
-fn run(cli: Cli, env_path: Option<&Path>, output: &mut impl Write) -> Result<(), AppError> {
+fn run(
+    cli: Cli,
+    env_path: Option<&Path>,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> Result<(), AppError> {
     let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
         Command::Departures { limit, format } => {
             let config = load_config(&path)?;
             let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
+            if let Some(warning) = query.cache_warning {
+                writeln!(diagnostics, "pidjezdy: warning: {warning}")
+                    .map_err(AppError::WriteDiagnostics)?;
+            }
             write_departures(output, format, query.generated_at, &query.departures)?;
             Ok(())
         }
@@ -307,8 +324,9 @@ mod tests {
         ])
         .unwrap();
         let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
 
-        run(cli, None, &mut output).unwrap();
+        run(cli, None, &mut output, &mut diagnostics).unwrap();
 
         assert!(
             String::from_utf8(output)

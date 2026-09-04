@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const DEFAULT_MAX_DEPARTURES: usize = 3;
@@ -8,7 +8,7 @@ const DEFAULT_MINUTES_AFTER: u32 = 120;
 const DEFAULT_API_LIMIT: usize = 20;
 const DEFAULT_SAFETY_BUFFER_MINUTES: u32 = 2;
 
-#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub display: DisplayConfig,
@@ -100,7 +100,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct DisplayConfig {
     pub max_departures: usize,
@@ -114,7 +114,7 @@ impl Default for DisplayConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct FetchConfig {
     pub minutes_after: u32,
@@ -130,7 +130,7 @@ impl Default for FetchConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BoardingPoint {
     pub name: String,
@@ -141,7 +141,7 @@ pub struct BoardingPoint {
     pub routes: Vec<RouteFilter>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct RouteFilter {
     pub line: String,

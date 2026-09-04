@@ -4,10 +4,13 @@ use pidjezdy_core::selection::{SelectedDeparture, SelectionOptions, select_depar
 use pidjezdy_pid::{DepartureBoardRequest, PidClient, PidClientError, PidRequestError};
 use thiserror::Error;
 
+use crate::cache::{CacheWriteError, write_snapshot};
+
 #[derive(Debug)]
 pub(crate) struct DepartureQuery {
     pub(crate) generated_at: DateTime<Utc>,
     pub(crate) departures: Vec<SelectedDeparture>,
+    pub(crate) cache_warning: Option<CacheWriteError>,
 }
 
 #[derive(Debug, Error)]
@@ -34,6 +37,7 @@ pub(crate) fn query_departures(
     let client = PidClient::new().map_err(DepartureQueryError::CreateClient)?;
     let departures = client.fetch(&request).map_err(DepartureQueryError::Fetch)?;
     let generated_at = Utc::now();
+    let cache_warning = write_snapshot(config, generated_at, &departures).err();
     let departures = select_departures(
         config,
         &departures,
@@ -46,6 +50,7 @@ pub(crate) fn query_departures(
     Ok(DepartureQuery {
         generated_at,
         departures,
+        cache_warning,
     })
 }
 
