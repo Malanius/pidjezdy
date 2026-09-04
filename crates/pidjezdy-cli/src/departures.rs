@@ -4,6 +4,12 @@ use pidjezdy_core::selection::{SelectedDeparture, SelectionOptions, select_depar
 use pidjezdy_pid::{DepartureBoardRequest, PidClient, PidClientError, PidRequestError};
 use thiserror::Error;
 
+#[derive(Debug)]
+pub struct DepartureQuery {
+    pub generated_at: DateTime<Utc>,
+    pub departures: Vec<SelectedDeparture>,
+}
+
 #[derive(Debug, Error)]
 pub enum DepartureQueryError {
     #[error("could not build PID departure request: {0}")]
@@ -22,21 +28,25 @@ pub enum DepartureQueryError {
 /// fetching and decoding the provider response fails.
 pub fn query_departures(
     config: &Config,
-    now: DateTime<Utc>,
     limit: usize,
-) -> Result<Vec<SelectedDeparture>, DepartureQueryError> {
+) -> Result<DepartureQuery, DepartureQueryError> {
     let request = configured_request(config)?;
     let client = PidClient::new().map_err(DepartureQueryError::CreateClient)?;
     let departures = client.fetch(&request).map_err(DepartureQueryError::Fetch)?;
-    Ok(select_departures(
+    let generated_at = Utc::now();
+    let departures = select_departures(
         config,
         &departures,
-        now,
+        generated_at,
         SelectionOptions {
             limit,
             include_unreachable: false,
         },
-    ))
+    );
+    Ok(DepartureQuery {
+        generated_at,
+        departures,
+    })
 }
 
 fn configured_request(config: &Config) -> Result<DepartureBoardRequest, PidRequestError> {

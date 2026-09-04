@@ -3,7 +3,6 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
@@ -158,10 +157,8 @@ fn run(cli: Cli, env_path: Option<&Path>, output: &mut impl Write) -> Result<(),
     match cli.command {
         Command::Departures { limit, format } => {
             let config = load_config(&path)?;
-            let now = Utc::now();
-            let departures =
-                query_departures(&config, now, limit.unwrap_or(config.display.max_departures))?;
-            write_departures(output, format, now, &departures)?;
+            let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
+            write_departures(output, format, query.generated_at, &query.departures)?;
             Ok(())
         }
         Command::Config { command } => match command {

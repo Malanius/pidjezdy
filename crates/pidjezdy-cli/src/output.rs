@@ -66,7 +66,8 @@ fn write_text(
         let platform = departure
             .platform_code
             .as_deref()
-            .filter(|code| !code.trim().is_empty())
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
             .map_or_else(String::new, |code| format!(" · platform {code}"));
         let leave = if selected.leave_in_minutes() == 0 {
             "leave now".to_owned()
@@ -106,7 +107,7 @@ mod tests {
                 line: "158".into(),
                 headsign: "Centre".into(),
                 stop_id: "U100Z1P".into(),
-                platform_code: Some("A".into()),
+                platform_code: Some(" A ".into()),
                 scheduled_at: now() + TimeDelta::minutes(10),
                 predicted_at: None,
                 delay_seconds: None,
