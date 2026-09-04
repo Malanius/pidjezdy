@@ -67,13 +67,12 @@ enum Command {
 }
 
 fn parse_departure_limit(value: &str) -> Result<usize, String> {
-    let limit = value
-        .parse::<usize>()
-        .map_err(|_| "limit must be an integer between 1 and 20".to_owned())?;
+    const ERROR: &str = "limit must be an integer between 1 and 20";
+    let limit = value.parse::<usize>().map_err(|_| ERROR.to_owned())?;
     if (1..=20).contains(&limit) {
         Ok(limit)
     } else {
-        Err("limit must be between 1 and 20".to_owned())
+        Err(ERROR.to_owned())
     }
 }
 
@@ -312,7 +311,10 @@ mod tests {
     #[test]
     fn departures_rejects_limits_outside_the_supported_range() {
         for limit in ["0", "21", "not-a-number"] {
-            assert!(Cli::try_parse_from(["pidjezdy", "departures", "--limit", limit]).is_err());
+            let error = Cli::try_parse_from(["pidjezdy", "departures", "--limit", limit])
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("limit must be an integer between 1 and 20"));
         }
     }
 }
