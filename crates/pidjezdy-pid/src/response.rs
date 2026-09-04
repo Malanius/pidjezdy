@@ -5,7 +5,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum PidResponseError {
-    #[error("invalid PID response JSON: {0}")]
+    #[error("could not deserialize PID response: {0}")]
     Json(#[from] serde_json::Error),
     #[error("PID API returned status {status}: {message}{details}")]
     Api {

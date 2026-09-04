@@ -124,6 +124,7 @@ mod tests {
     use super::*;
 
     const DEPARTURES: &[u8] = include_bytes!("../tests/fixtures/departures.json");
+    const ERROR: &[u8] = include_bytes!("../tests/fixtures/error.json");
 
     #[test]
     fn decodes_plain_and_gzip_bodies_by_magic_bytes() {
@@ -175,6 +176,21 @@ mod tests {
         assert!(matches!(
             client.fetch(&request),
             Err(PidClientError::HttpStatus { status: 503, .. })
+        ));
+    }
+
+    #[test]
+    fn fetch_reports_structured_api_errors_from_successful_http_responses() {
+        let endpoint = serve_once(200, &[], ERROR);
+        let client = PidClient::with_endpoint(&endpoint).unwrap();
+        let request = DepartureBoardRequest::new(120, 20, vec![vec!["U100Z1P".into()]]).unwrap();
+
+        assert!(matches!(
+            client.fetch(&request),
+            Err(PidClientError::Response(PidResponseError::Api {
+                status: 400,
+                ..
+            }))
         ));
     }
 
