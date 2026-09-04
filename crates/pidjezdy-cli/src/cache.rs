@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::Write as _;
+use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -12,6 +12,7 @@ use thiserror::Error;
 
 const CACHE_FILE: &str = "departures.json";
 const CACHE_VERSION: u8 = 1;
+const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -48,11 +49,15 @@ pub(crate) enum CacheWriteError {
     Flush(#[source] std::io::Error),
     #[error("could not sync departure cache: {0}")]
     Sync(#[source] std::io::Error),
+    #[error("could not inspect temporary departure cache: {0}")]
+    Inspect(#[source] std::io::Error),
     #[error("could not atomically replace cache {path}: {source}")]
     Persist {
         path: PathBuf,
         source: std::io::Error,
     },
+    #[error("departure cache exceeded the {limit}-byte size limit")]
+    TooLarge { limit: u64 },
 }
 
 #[derive(Debug, Error)]
@@ -70,6 +75,8 @@ pub(crate) enum CacheReadError {
     UnsupportedVersion(u8),
     #[error("departure cache belongs to a different configuration")]
     ConfigMismatch,
+    #[error("departure cache exceeded the {limit}-byte size limit")]
+    TooLarge { limit: u64 },
 }
 
 pub(crate) fn write_snapshot(
@@ -120,6 +127,17 @@ fn write_snapshot_to(
         .write_all(b"\n")
         .and_then(|()| temporary.flush())
         .map_err(CacheWriteError::Flush)?;
+    if temporary
+        .as_file()
+        .metadata()
+        .map_err(CacheWriteError::Inspect)?
+        .len()
+        > MAX_CACHE_BYTES
+    {
+        return Err(CacheWriteError::TooLarge {
+            limit: MAX_CACHE_BYTES,
+        });
+    }
     temporary
         .as_file()
         .sync_all()
@@ -134,10 +152,22 @@ fn write_snapshot_to(
 }
 
 fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, CacheReadError> {
-    let input = fs::read(path).map_err(|source| CacheReadError::Read {
+    let file = fs::File::open(path).map_err(|source| CacheReadError::Read {
         path: path.to_owned(),
         source,
     })?;
+    let mut input = Vec::new();
+    file.take(MAX_CACHE_BYTES.saturating_add(1))
+        .read_to_end(&mut input)
+        .map_err(|source| CacheReadError::Read {
+            path: path.to_owned(),
+            source,
+        })?;
+    if u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_CACHE_BYTES {
+        return Err(CacheReadError::TooLarge {
+            limit: MAX_CACHE_BYTES,
+        });
+    }
     let cached: CacheFile = serde_json::from_slice(&input).map_err(CacheReadError::Deserialize)?;
     if cached.version != CACHE_VERSION {
         return Err(CacheReadError::UnsupportedVersion(cached.version));
@@ -242,6 +272,24 @@ mod tests {
         assert!(matches!(
             read_snapshot_from(&path, &configured),
             Err(CacheReadError::UnsupportedVersion(2))
+        ));
+    }
+
+    #[test]
+    fn rejects_oversized_cache_files_before_deserialization() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("departures.json");
+        fs::write(
+            &path,
+            vec![b' '; usize::try_from(MAX_CACHE_BYTES).unwrap() + 1],
+        )
+        .unwrap();
+
+        assert!(matches!(
+            read_snapshot_from(&path, &config()),
+            Err(CacheReadError::TooLarge {
+                limit: MAX_CACHE_BYTES
+            })
         ));
     }
 }

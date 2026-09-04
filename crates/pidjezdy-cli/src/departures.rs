@@ -38,8 +38,8 @@ pub(crate) enum DepartureQueryError {
 ///
 /// # Errors
 ///
-/// Returns an error if a PID request or client cannot be constructed, or if
-/// fetching and decoding the provider response fails.
+/// Returns an error if a PID request cannot be constructed, or when both the
+/// live query and its compatible cached fallback are unavailable.
 pub(crate) fn query_departures(
     config: &Config,
     limit: usize,
