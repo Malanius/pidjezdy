@@ -5,8 +5,9 @@ top bar.
 
 The project is being built incrementally. The workspace currently provides a
 working CLI with portable user configuration, departure ranking, and a
-defensive adapter for PID's departure-board endpoint. Caching and the Omarchy
-plugin will arrive in focused follow-up pull requests.
+defensive adapter for PID's departure-board endpoint. It retains an atomic
+local fallback when PID is temporarily unavailable. The Omarchy plugin will
+arrive in a focused follow-up pull request.
 
 The departure endpoint is not officially specified. Its observed contract is
 documented in [`docs/pid-api.md`](docs/pid-api.md).
@@ -101,10 +102,35 @@ human-readable text:
 pidjezdy departures --format json
 ```
 
-The JSON document contains `generated_at`, a `stale` flag, and a `departures`
-array. Live responses currently set `stale` to `false`; the field is reserved
-for the planned cache fallback. Relative times are also included as exact
-seconds so consumers do not need to infer them from rounded labels.
+The JSON document contains `generated_at`, `data_updated_at`, a `stale` flag,
+and a `departures` array. Relative times are also included as exact seconds so
+consumers do not need to infer them from rounded labels.
+
+## Cache and stale data
+
+After every successful PID request, `pidjezdy` atomically replaces a snapshot
+in the platform-standard cache directory. The snapshot contains the raw,
+normalized departures, their fetch time, and the validated configuration that
+produced the request. A cache-write failure does not hide fresh results; it is
+reported as a warning on stderr.
+
+If PID cannot be reached or its response cannot be decoded, the CLI reads that
+snapshot only when its configuration exactly matches the current one. Cached
+raw departures are filtered and ranked again using the current time, so trips
+that are no longer reachable disappear normally.
+
+Cached output is always labeled. Text output starts with a line such as:
+
+```text
+STALE · data updated 3 min ago
+```
+
+JSON sets `stale` to `true`, preserves the original fetch time in
+`data_updated_at`, and uses the current processing time for `generated_at`.
+There is intentionally no hidden age threshold: consumers can use the explicit
+timestamps to choose their own policy, while departures naturally age out of
+the configured future window. A cache with an unsupported format, malformed
+content, or a different configuration is rejected instead of being shown.
 
 ## Development
 
