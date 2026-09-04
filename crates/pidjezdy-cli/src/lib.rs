@@ -6,7 +6,14 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
+use pidjezdy_pid::{PidClientError, PidRequestError};
 use thiserror::Error;
+
+mod departures;
+mod output;
+
+use departures::{DepartureQueryError, query_departures};
+use output::{OutputError, OutputFormat, write_departures};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
 const CONFIG_FILE: &str = "config.toml";
@@ -44,11 +51,30 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Show the next reachable configured departures.
+    Departures {
+        /// Override `display.max_departures` for this invocation.
+        #[arg(long, value_parser = parse_departure_limit)]
+        limit: Option<usize>,
+        /// Select human-readable or machine-readable output.
+        #[arg(long, value_enum, default_value_t)]
+        format: OutputFormat,
+    },
     /// Inspect and manage user configuration.
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+}
+
+fn parse_departure_limit(value: &str) -> Result<usize, String> {
+    const ERROR: &str = "limit must be an integer between 1 and 20";
+    let limit = value.parse::<usize>().map_err(|_| ERROR.to_owned())?;
+    if (1..=20).contains(&limit) {
+        Ok(limit)
+    } else {
+        Err(ERROR.to_owned())
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -84,8 +110,35 @@ pub enum AppError {
     },
     #[error("invalid configuration {path}: {source}")]
     InvalidConfig { path: PathBuf, source: ConfigError },
+    #[error("could not build PID departure request: {0}")]
+    DepartureRequest(#[source] PidRequestError),
+    #[error("could not create PID client: {0}")]
+    CreatePidClient(#[source] PidClientError),
+    #[error("could not fetch PID departures: {0}")]
+    FetchDepartures(#[source] PidClientError),
+    #[error("could not serialize JSON output: {0}")]
+    SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
-    WriteOutput(std::io::Error),
+    WriteOutput(#[source] std::io::Error),
+}
+
+impl From<DepartureQueryError> for AppError {
+    fn from(error: DepartureQueryError) -> Self {
+        match error {
+            DepartureQueryError::Request(source) => Self::DepartureRequest(source),
+            DepartureQueryError::CreateClient(source) => Self::CreatePidClient(source),
+            DepartureQueryError::Fetch(source) => Self::FetchDepartures(source),
+        }
+    }
+}
+
+impl From<OutputError> for AppError {
+    fn from(error: OutputError) -> Self {
+        match error {
+            OutputError::Json(source) => Self::SerializeOutput(source),
+            OutputError::Write(source) => Self::WriteOutput(source),
+        }
+    }
 }
 
 /// Run the command using process arguments and environment.
@@ -125,6 +178,12 @@ pub fn resolve_config_path(
 fn run(cli: Cli, env_path: Option<&Path>, output: &mut impl Write) -> Result<(), AppError> {
     let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
+        Command::Departures { limit, format } => {
+            let config = load_config(&path)?;
+            let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
+            write_departures(output, format, query.generated_at, &query.departures)?;
+            Ok(())
+        }
         Command::Config { command } => match command {
             ConfigCommand::Path => {
                 writeln!(output, "{}", path.display()).map_err(AppError::WriteOutput)
@@ -256,5 +315,36 @@ mod tests {
                 .unwrap()
                 .contains("configuration is valid")
         );
+    }
+
+    #[test]
+    fn departures_accepts_bounded_limit_and_json_format() {
+        let cli =
+            Cli::try_parse_from(["pidjezdy", "departures", "--limit", "2", "--format", "json"])
+                .unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Command::Departures {
+                limit: Some(2),
+                format: OutputFormat::Json
+            }
+        ));
+    }
+
+    #[test]
+    fn departures_rejects_limits_outside_the_supported_range() {
+        for limit in ["0", "21", "not-a-number"] {
+            let error = Cli::try_parse_from(["pidjezdy", "departures", "--limit", limit])
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("limit must be an integer between 1 and 20"));
+        }
+    }
+
+    #[test]
+    fn output_errors_preserve_the_io_error_source() {
+        let error = AppError::WriteOutput(std::io::Error::other("closed output"));
+        assert!(std::error::Error::source(&error).is_some());
     }
 }
