@@ -3,10 +3,14 @@
 Actionable PID departure information for the terminal and, soon, the Omarchy
 top bar.
 
-The project is being built incrementally. The first slice provides the Cargo
-workspace and portable user-configuration foundation. PID fetching, departure
-selection, CLI output, and the Omarchy plugin will arrive in focused follow-up
-pull requests.
+The project is being built incrementally. The workspace currently provides
+portable user configuration, departure ranking, and a defensive adapter for
+PID's departure-board endpoint. CLI output and the Omarchy plugin will arrive
+in focused follow-up pull requests.
+
+The departure endpoint is not officially specified. Its observed request,
+response, error, and transport behavior is recorded in
+[`docs/pid-api.md`](docs/pid-api.md).
 
 ## Configuration
 
