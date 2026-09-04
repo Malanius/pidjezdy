@@ -8,9 +8,8 @@ portable user configuration, departure ranking, and a defensive adapter for
 PID's departure-board endpoint. CLI output and the Omarchy plugin will arrive
 in focused follow-up pull requests.
 
-The departure endpoint is not officially specified. Its observed request,
-response, error, and transport behavior is recorded in
-[`docs/pid-api.md`](docs/pid-api.md).
+The departure endpoint is not officially specified. Its observed contract is
+documented in [`docs/pid-api.md`](docs/pid-api.md).
 
 ## Configuration
 
