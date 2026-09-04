@@ -1,3 +1,5 @@
-//! PID API integration for pidjezdy.
-//!
-//! The provider implementation will be added in a focused follow-up change.
+//! Adapter for PID's undocumented public departure-board endpoint.
+
+mod response;
+
+pub use response::{PidResponseError, parse_response};
