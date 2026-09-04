@@ -1,0 +1,56 @@
+[
+  [
+    {
+      "departure": {
+        "timestamp_scheduled": "2026-09-04T12:10:00+02:00",
+        "timestamp_predicted": "2026-09-04T12:12:00+02:00",
+        "delay_seconds": 120,
+        "minutes": 12
+      },
+      "stop": {
+        "id": "U100Z1P",
+        "sequence": 3,
+        "platform_code": "A"
+      },
+      "route": {
+        "type": "bus",
+        "short_name": "158"
+      },
+      "trip": {
+        "id": "158_100_260901",
+        "headsign": "Centrum",
+        "is_canceled": false
+      },
+      "vehicle": {
+        "id": "vehicle-1",
+        "is_wheelchair_accessible": true,
+        "is_air_conditioned": true,
+        "has_charger": false
+      },
+      "future_unknown_field": "ignored"
+    }
+  ],
+  [
+    {
+      "departure": {
+        "timestamp_scheduled": "2026-09-04T12:20:00+02:00",
+        "timestamp_predicted": null,
+        "delay_seconds": null,
+        "minutes": 20
+      },
+      "stop": {
+        "id": "U200Z2P",
+        "platform_code": null
+      },
+      "route": {
+        "type": "tram",
+        "short_name": "1"
+      },
+      "trip": {
+        "id": "1_200_260901",
+        "headsign": "Nádraží"
+      },
+      "vehicle": null
+    }
+  ]
+]
