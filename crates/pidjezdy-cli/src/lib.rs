@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
+use pidjezdy_pid::{PidClientError, PidRequestError};
 use thiserror::Error;
 
-pub mod departures;
-pub mod output;
+mod departures;
+mod output;
 
 use departures::{DepartureQueryError, query_departures};
 use output::{OutputError, OutputFormat, write_departures};
@@ -109,12 +110,35 @@ pub enum AppError {
     },
     #[error("invalid configuration {path}: {source}")]
     InvalidConfig { path: PathBuf, source: ConfigError },
-    #[error(transparent)]
-    DepartureQuery(#[from] DepartureQueryError),
-    #[error(transparent)]
-    Output(#[from] OutputError),
+    #[error("could not build PID departure request: {0}")]
+    DepartureRequest(#[source] PidRequestError),
+    #[error("could not create PID client: {0}")]
+    CreatePidClient(#[source] PidClientError),
+    #[error("could not fetch PID departures: {0}")]
+    FetchDepartures(#[source] PidClientError),
+    #[error("could not serialize JSON output: {0}")]
+    SerializeOutput(#[source] serde_json::Error),
     #[error("could not write command output: {0}")]
     WriteOutput(std::io::Error),
+}
+
+impl From<DepartureQueryError> for AppError {
+    fn from(error: DepartureQueryError) -> Self {
+        match error {
+            DepartureQueryError::Request(source) => Self::DepartureRequest(source),
+            DepartureQueryError::CreateClient(source) => Self::CreatePidClient(source),
+            DepartureQueryError::Fetch(source) => Self::FetchDepartures(source),
+        }
+    }
+}
+
+impl From<OutputError> for AppError {
+    fn from(error: OutputError) -> Self {
+        match error {
+            OutputError::Json(source) => Self::SerializeOutput(source),
+            OutputError::Write(source) => Self::WriteOutput(source),
+        }
+    }
 }
 
 /// Run the command using process arguments and environment.

@@ -7,14 +7,14 @@ use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
-pub enum OutputFormat {
+pub(crate) enum OutputFormat {
     #[default]
     Text,
     Json,
 }
 
 #[derive(Debug, Error)]
-pub enum OutputError {
+pub(crate) enum OutputError {
     #[error("could not serialize JSON output: {0}")]
     Json(#[from] serde_json::Error),
     #[error("could not write command output: {0}")]
@@ -33,7 +33,7 @@ struct JsonOutput<'a> {
 /// # Errors
 ///
 /// Returns an error when JSON serialization or writing to the output fails.
-pub fn write_departures(
+pub(crate) fn write_departures(
     output: &mut impl Write,
     format: OutputFormat,
     generated_at: DateTime<Utc>,

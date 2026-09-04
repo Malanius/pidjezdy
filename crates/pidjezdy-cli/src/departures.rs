@@ -5,19 +5,19 @@ use pidjezdy_pid::{DepartureBoardRequest, PidClient, PidClientError, PidRequestE
 use thiserror::Error;
 
 #[derive(Debug)]
-pub struct DepartureQuery {
-    pub generated_at: DateTime<Utc>,
-    pub departures: Vec<SelectedDeparture>,
+pub(crate) struct DepartureQuery {
+    pub(crate) generated_at: DateTime<Utc>,
+    pub(crate) departures: Vec<SelectedDeparture>,
 }
 
 #[derive(Debug, Error)]
-pub enum DepartureQueryError {
+pub(crate) enum DepartureQueryError {
     #[error("could not build PID departure request: {0}")]
     Request(#[from] PidRequestError),
     #[error("could not create PID client: {0}")]
-    CreateClient(PidClientError),
+    CreateClient(#[source] PidClientError),
     #[error("could not fetch PID departures: {0}")]
-    Fetch(PidClientError),
+    Fetch(#[source] PidClientError),
 }
 
 /// Fetch, filter, rank, and limit departures using validated configuration.
@@ -26,7 +26,7 @@ pub enum DepartureQueryError {
 ///
 /// Returns an error if a PID request or client cannot be constructed, or if
 /// fetching and decoding the provider response fails.
-pub fn query_departures(
+pub(crate) fn query_departures(
     config: &Config,
     limit: usize,
 ) -> Result<DepartureQuery, DepartureQueryError> {
