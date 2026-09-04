@@ -3,12 +3,17 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use chrono::Utc;
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
 use thiserror::Error;
 
 pub mod departures;
+pub mod output;
+
+use departures::{DepartureQueryError, query_departures};
+use output::{OutputError, OutputFormat, write_departures};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
 const CONFIG_FILE: &str = "config.toml";
@@ -46,11 +51,31 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Show the next reachable configured departures.
+    Departures {
+        /// Override `display.max_departures` for this invocation.
+        #[arg(long, value_parser = parse_departure_limit)]
+        limit: Option<usize>,
+        /// Select human-readable or machine-readable output.
+        #[arg(long, value_enum, default_value_t)]
+        format: OutputFormat,
+    },
     /// Inspect and manage user configuration.
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+}
+
+fn parse_departure_limit(value: &str) -> Result<usize, String> {
+    let limit = value
+        .parse::<usize>()
+        .map_err(|_| "limit must be an integer between 1 and 20".to_owned())?;
+    if (1..=20).contains(&limit) {
+        Ok(limit)
+    } else {
+        Err("limit must be between 1 and 20".to_owned())
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -86,6 +111,10 @@ pub enum AppError {
     },
     #[error("invalid configuration {path}: {source}")]
     InvalidConfig { path: PathBuf, source: ConfigError },
+    #[error(transparent)]
+    DepartureQuery(#[from] DepartureQueryError),
+    #[error(transparent)]
+    Output(#[from] OutputError),
     #[error("could not write command output: {0}")]
     WriteOutput(std::io::Error),
 }
@@ -127,6 +156,14 @@ pub fn resolve_config_path(
 fn run(cli: Cli, env_path: Option<&Path>, output: &mut impl Write) -> Result<(), AppError> {
     let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
+        Command::Departures { limit, format } => {
+            let config = load_config(&path)?;
+            let now = Utc::now();
+            let departures =
+                query_departures(&config, now, limit.unwrap_or(config.display.max_departures))?;
+            write_departures(output, format, now, &departures)?;
+            Ok(())
+        }
         Command::Config { command } => match command {
             ConfigCommand::Path => {
                 writeln!(output, "{}", path.display()).map_err(AppError::WriteOutput)
@@ -258,5 +295,27 @@ mod tests {
                 .unwrap()
                 .contains("configuration is valid")
         );
+    }
+
+    #[test]
+    fn departures_accepts_bounded_limit_and_json_format() {
+        let cli =
+            Cli::try_parse_from(["pidjezdy", "departures", "--limit", "2", "--format", "json"])
+                .unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Command::Departures {
+                limit: Some(2),
+                format: OutputFormat::Json
+            }
+        ));
+    }
+
+    #[test]
+    fn departures_rejects_limits_outside_the_supported_range() {
+        for limit in ["0", "21", "not-a-number"] {
+            assert!(Cli::try_parse_from(["pidjezdy", "departures", "--limit", limit]).is_err());
+        }
     }
 }

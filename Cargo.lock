@@ -889,6 +889,8 @@ dependencies = [
  "directories",
  "pidjezdy-core",
  "pidjezdy-pid",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "url",
