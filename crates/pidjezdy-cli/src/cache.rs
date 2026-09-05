@@ -45,6 +45,8 @@ pub(crate) enum CacheWriteError {
     },
     #[error("could not serialize departure cache: {0}")]
     Serialize(#[source] serde_json::Error),
+    #[error("could not write departure cache: {0}")]
+    Write(#[source] std::io::Error),
     #[error("could not flush departure cache: {0}")]
     Flush(#[source] std::io::Error),
     #[error("could not sync departure cache: {0}")]
@@ -64,6 +66,8 @@ pub(crate) enum CacheWriteError {
 pub(crate) enum CacheReadError {
     #[error("could not determine the platform cache directory")]
     DirectoryUnavailable,
+    #[error("no cached departures available yet at {path}")]
+    NotFound { path: PathBuf },
     #[error("could not read departure cache {path}: {source}")]
     Read {
         path: PathBuf,
@@ -103,6 +107,16 @@ fn write_snapshot_to(
     fetched_at: DateTime<Utc>,
     departures: &[Departure],
 ) -> Result<(), CacheWriteError> {
+    write_snapshot_to_with_limit(path, config, fetched_at, departures, MAX_CACHE_BYTES)
+}
+
+fn write_snapshot_to_with_limit(
+    path: &Path,
+    config: &Config,
+    fetched_at: DateTime<Utc>,
+    departures: &[Departure],
+    max_bytes: u64,
+) -> Result<(), CacheWriteError> {
     let directory = cache_directory(path);
     fs::create_dir_all(directory).map_err(|source| CacheWriteError::CreateDirectory {
         path: directory.to_owned(),
@@ -123,20 +137,16 @@ fn write_snapshot_to(
         },
     )
     .map_err(CacheWriteError::Serialize)?;
-    temporary
-        .write_all(b"\n")
-        .and_then(|()| temporary.flush())
-        .map_err(CacheWriteError::Flush)?;
+    temporary.write_all(b"\n").map_err(CacheWriteError::Write)?;
+    temporary.flush().map_err(CacheWriteError::Flush)?;
     if temporary
         .as_file()
         .metadata()
         .map_err(CacheWriteError::Inspect)?
         .len()
-        > MAX_CACHE_BYTES
+        > max_bytes
     {
-        return Err(CacheWriteError::TooLarge {
-            limit: MAX_CACHE_BYTES,
-        });
+        return Err(CacheWriteError::TooLarge { limit: max_bytes });
     }
     temporary
         .as_file()
@@ -158,9 +168,17 @@ fn cache_directory(path: &Path) -> &Path {
 }
 
 fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, CacheReadError> {
-    let file = fs::File::open(path).map_err(|source| CacheReadError::Read {
-        path: path.to_owned(),
-        source,
+    let file = fs::File::open(path).map_err(|source| {
+        if source.kind() == std::io::ErrorKind::NotFound {
+            CacheReadError::NotFound {
+                path: path.to_owned(),
+            }
+        } else {
+            CacheReadError::Read {
+                path: path.to_owned(),
+                source,
+            }
+        }
     })?;
     let input = read_at_most(file, MAX_CACHE_BYTES)
         .map_err(|source| CacheReadError::Read {
@@ -194,6 +212,8 @@ fn read_at_most(reader: impl Read, limit: u64) -> Result<Option<Vec<u8>>, std::i
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use chrono::TimeDelta;
     use pidjezdy_core::departure::Vehicle;
 
@@ -302,6 +322,101 @@ mod tests {
                 limit: MAX_CACHE_BYTES
             })
         ));
+    }
+
+    #[test]
+    fn reports_a_missing_cache_as_an_expected_empty_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("departures.json");
+
+        let error = read_snapshot_from(&path, &config()).unwrap_err();
+
+        assert!(matches!(
+            &error,
+            CacheReadError::NotFound { path: missing } if missing == &path
+        ));
+        assert_eq!(
+            error.to_string(),
+            format!("no cached departures available yet at {}", path.display())
+        );
+    }
+
+    #[test]
+    fn rejects_snapshots_that_exceed_the_write_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("departures.json");
+
+        let error = write_snapshot_to_with_limit(&path, &config(), now(), &[departure("large")], 1)
+            .unwrap_err();
+
+        assert!(matches!(error, CacheWriteError::TooLarge { limit: 1 }));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn reports_failure_to_persist_the_temporary_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("existing-directory");
+        fs::create_dir(&destination).unwrap();
+
+        let error =
+            write_snapshot_to(&destination, &config(), now(), &[departure("cached")]).unwrap_err();
+
+        assert!(matches!(
+            error,
+            CacheWriteError::Persist { path, .. } if path == destination
+        ));
+    }
+
+    #[test]
+    fn distinguishes_write_and_flush_diagnostics() {
+        let write = CacheWriteError::Write(std::io::Error::other("disk full"));
+        let flush = CacheWriteError::Flush(std::io::Error::other("device unavailable"));
+
+        assert_eq!(
+            write.to_string(),
+            "could not write departure cache: disk full"
+        );
+        assert_eq!(
+            flush.to_string(),
+            "could not flush departure cache: device unavailable"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn platform_cache_wrappers_resolve_and_round_trip() {
+        const CHILD_ROOT: &str = "PIDJEZDY_CACHE_TEST_ROOT";
+
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            let expected_path = PathBuf::from(root).join("pidjezdy").join(CACHE_FILE);
+            assert_eq!(
+                default_cache_path().as_deref(),
+                Some(expected_path.as_path())
+            );
+
+            write_snapshot(&config(), now(), &[departure("platform-cache")]).unwrap();
+            let cached = read_snapshot(&config()).unwrap();
+            assert_eq!(cached.fetched_at, now());
+            assert_eq!(cached.departures[0].trip_id, "platform-cache");
+            return;
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("cache::tests::platform_cache_wrappers_resolve_and_round_trip")
+            .env(CHILD_ROOT, directory.path())
+            .env("XDG_CACHE_HOME", directory.path())
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "child test failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
