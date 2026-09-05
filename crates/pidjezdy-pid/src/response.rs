@@ -15,8 +15,20 @@ pub enum PidResponseError {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiDetails(Option<String>);
+
+impl ApiDetails {
+    #[must_use]
+    pub fn new(value: Option<String>) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub fn as_deref(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
 
 impl std::fmt::Display for ApiDetails {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,25 +53,21 @@ impl std::fmt::Display for ApiDetails {
 ///
 /// Returns malformed JSON, schema/timestamp errors, or a structured API error.
 pub fn parse_response(input: &[u8]) -> Result<Vec<Departure>, PidResponseError> {
-    match serde_json::from_slice::<ApiResponse>(input)? {
-        ApiResponse::Departures(groups) => Ok(groups
+    if input.iter().find(|byte| !byte.is_ascii_whitespace()) == Some(&b'{') {
+        let error: ApiError = serde_json::from_slice(input)?;
+        Err(PidResponseError::Api {
+            status: error.status,
+            message: error.message,
+            details: ApiDetails::new(error.info),
+        })
+    } else {
+        let groups: Vec<Vec<ApiDeparture>> = serde_json::from_slice(input)?;
+        Ok(groups
             .into_iter()
             .flatten()
             .map(ApiDeparture::normalize)
-            .collect()),
-        ApiResponse::Error(error) => Err(PidResponseError::Api {
-            status: error.status,
-            message: error.message,
-            details: ApiDetails(error.info),
-        }),
+            .collect())
     }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ApiResponse {
-    Departures(Vec<Vec<ApiDeparture>>),
-    Error(ApiError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,8 +213,9 @@ mod tests {
             PidResponseError::Api {
                 status: 400,
                 ref message,
-                ..
+                ref details,
             } if message == "Bad request"
+                && details.as_deref().is_some_and(|value| value.contains("Invalid value"))
         ));
         assert!(error.to_string().contains("Invalid value"));
     }
@@ -226,9 +235,19 @@ mod tests {
             invalid_time..invalid_time + b"2026-09-04T12:10:00+02:00".len(),
             b"invalid-time".iter().copied(),
         );
-        assert!(matches!(
-            parse_response(&body),
-            Err(PidResponseError::Json(_))
-        ));
+        let error = parse_response(&body).unwrap_err().to_string();
+        assert!(error.contains("line"), "{error}");
+        assert!(error.contains("column"), "{error}");
+        assert!(!error.contains("untagged enum"), "{error}");
+
+        let missing_field = String::from_utf8(DEPARTURES.to_vec())
+            .unwrap()
+            .replace("\"short_name\"", "\"shortName\"");
+        let error = parse_response(missing_field.as_bytes())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("missing field `short_name`"), "{error}");
+        assert!(error.contains("line"), "{error}");
+        assert!(error.contains("column"), "{error}");
     }
 }
