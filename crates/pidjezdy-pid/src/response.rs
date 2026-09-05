@@ -93,10 +93,10 @@ struct ApiDeparture {
 impl ApiDeparture {
     fn normalize(self) -> Departure {
         Departure {
-            trip_id: normalize_text(&self.trip.id),
-            line: normalize_text(&self.route.short_name),
-            headsign: normalize_text(&self.trip.headsign),
-            stop_id: normalize_text(&self.stop.id),
+            trip_id: normalize_text(self.trip.id),
+            line: normalize_text(self.route.short_name),
+            headsign: normalize_text(self.trip.headsign),
+            stop_id: normalize_text(self.stop.id),
             platform_code: non_empty(self.stop.platform_code),
             scheduled_at: self.departure.timestamp_scheduled.to_utc(),
             predicted_at: self
@@ -165,13 +165,21 @@ impl ApiVehicle {
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
-    value
-        .map(|text| normalize_text(&text))
-        .filter(|text| !text.is_empty())
+    value.and_then(|text| {
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(normalize_text(text))
+        }
+    })
 }
 
-fn normalize_text(value: &str) -> String {
-    value.trim().to_owned()
+fn normalize_text(value: String) -> String {
+    if value.trim().len() == value.len() {
+        value
+    } else {
+        value.trim().to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -232,6 +240,18 @@ mod tests {
         assert_eq!(tracked.stop_id, "U100Z1P");
         assert_eq!(tracked.platform_code.as_deref(), Some("A"));
         assert_eq!(tracked.vehicle.id.as_deref(), Some("vehicle-1"));
+    }
+
+    #[test]
+    fn normalization_reuses_clean_strings_and_discards_blank_options() {
+        let clean = "already normalized".to_owned();
+        let allocation = clean.as_ptr();
+
+        let normalized = normalize_text(clean);
+
+        assert_eq!(normalized, "already normalized");
+        assert_eq!(normalized.as_ptr(), allocation);
+        assert_eq!(non_empty(Some("   ".into())), None);
     }
 
     #[test]
