@@ -9,6 +9,11 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::departures::DepartureQuery;
 
+const LINE_STYLE: &str = "\x1b[1;36m";
+const EMPHASIS_STYLE: &str = "\x1b[1m";
+const DIM_STYLE: &str = "\x1b[2m";
+const RESET_STYLE: &str = "\x1b[0m";
+
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub(crate) enum OutputFormat {
     #[default]
@@ -84,44 +89,60 @@ fn write_text(
     }
 
     let rows = departures.iter().map(TextRow::from).collect::<Vec<_>>();
-    let line_width = rows
-        .iter()
-        .map(|row| display_width(row.line))
-        .max()
-        .unwrap_or(0);
+    let line_width = rows.iter().map(|row| row.line.width()).max().unwrap_or(0);
     let detail_width = rows
         .iter()
-        .flat_map(|row| [display_width(row.headsign), display_width(&row.boarding)])
+        .flat_map(|row| [row.headsign.width(), row.boarding.width()])
         .max()
         .unwrap_or(0);
     let time_width = rows
         .iter()
-        .flat_map(|row| [display_width(&row.leave), display_width(&row.departs)])
+        .flat_map(|row| [row.leave.width(), row.departs.width()])
         .max()
         .unwrap_or(0);
     let separator = "─".repeat(line_width + detail_width + time_width + 4);
 
     for (index, row) in rows.iter().enumerate() {
         if index > 0 {
-            write_styled_line(output, styled, "\x1b[2m", &separator)?;
+            write_styled_line(output, styled, DIM_STYLE, &separator)?;
         }
 
-        let line = pad_right(row.line, line_width);
-        let headsign = pad_right(row.headsign, detail_width);
-        let leave = pad_left(&row.leave, time_width);
-        if styled {
-            writeln!(
-                output,
-                "\x1b[1;36m{line}\x1b[0m  \x1b[1m{headsign}\x1b[0m  \x1b[1m{leave}\x1b[0m"
-            )?;
-        } else {
-            writeln!(output, "{line}  {headsign}  {leave}")?;
-        }
+        write_styled_padded(
+            output,
+            styled,
+            LINE_STYLE,
+            row.line,
+            line_width,
+            Alignment::Left,
+        )?;
+        write!(output, "  ")?;
+        write_styled_padded(
+            output,
+            styled,
+            EMPHASIS_STYLE,
+            row.headsign,
+            detail_width,
+            Alignment::Left,
+        )?;
+        write!(output, "  ")?;
+        write_styled_padded(
+            output,
+            styled,
+            EMPHASIS_STYLE,
+            &row.leave,
+            time_width,
+            Alignment::Right,
+        )?;
+        writeln!(output)?;
 
-        let boarding = pad_right(&row.boarding, detail_width);
-        let departs = pad_left(&row.departs, time_width);
-        let secondary = format!("{}  {boarding}  {departs}", " ".repeat(line_width));
-        write_styled_line(output, styled, "\x1b[2m", &secondary)?;
+        write_style(output, styled, DIM_STYLE)?;
+        write_padding(output, line_width)?;
+        write!(output, "  ")?;
+        write_padded(output, &row.boarding, detail_width, Alignment::Left)?;
+        write!(output, "  ")?;
+        write_padded(output, &row.departs, time_width, Alignment::Right)?;
+        write_style(output, styled, RESET_STYLE)?;
+        writeln!(output)?;
     }
     Ok(())
 }
@@ -159,22 +180,51 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
     }
 }
 
-fn display_width(value: &str) -> usize {
-    value.width()
+#[derive(Clone, Copy)]
+enum Alignment {
+    Left,
+    Right,
 }
 
-fn pad_right(value: &str, width: usize) -> String {
-    format!(
-        "{value}{}",
-        " ".repeat(width.saturating_sub(display_width(value)))
-    )
+fn write_styled_padded(
+    output: &mut impl Write,
+    styled: bool,
+    style: &str,
+    value: &str,
+    width: usize,
+    alignment: Alignment,
+) -> Result<(), std::io::Error> {
+    write_style(output, styled, style)?;
+    write_padded(output, value, width, alignment)?;
+    write_style(output, styled, RESET_STYLE)
 }
 
-fn pad_left(value: &str, width: usize) -> String {
-    format!(
-        "{}{value}",
-        " ".repeat(width.saturating_sub(display_width(value)))
-    )
+fn write_padded(
+    output: &mut impl Write,
+    value: &str,
+    width: usize,
+    alignment: Alignment,
+) -> Result<(), std::io::Error> {
+    let padding = width.saturating_sub(value.width());
+    if matches!(alignment, Alignment::Right) {
+        write_padding(output, padding)?;
+    }
+    write!(output, "{value}")?;
+    if matches!(alignment, Alignment::Left) {
+        write_padding(output, padding)?;
+    }
+    Ok(())
+}
+
+fn write_padding(output: &mut impl Write, width: usize) -> Result<(), std::io::Error> {
+    write!(output, "{:width$}", "")
+}
+
+fn write_style(output: &mut impl Write, styled: bool, style: &str) -> Result<(), std::io::Error> {
+    if styled {
+        write!(output, "{style}")?;
+    }
+    Ok(())
 }
 
 fn write_styled_line(
@@ -184,7 +234,7 @@ fn write_styled_line(
     value: &str,
 ) -> Result<(), std::io::Error> {
     if styled {
-        writeln!(output, "{style}{value}\x1b[0m")
+        writeln!(output, "{style}{value}{RESET_STYLE}")
     } else {
         writeln!(output, "{value}")
     }
@@ -265,14 +315,14 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         let lines = output.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 5);
-        assert_eq!(lines[2], "─".repeat(display_width(lines[0])));
+        assert_eq!(lines[2], "─".repeat(lines[0].width()));
     }
 
     #[test]
     fn display_width_uses_terminal_cells_for_unicode() {
-        assert_eq!(display_width("Letňany"), 7);
-        assert_eq!(display_width("Ａ"), 2);
-        assert_eq!(display_width("e\u{301}"), 1);
+        assert_eq!("Letňany".width(), 7);
+        assert_eq!("Ａ".width(), 2);
+        assert_eq!("e\u{301}".width(), 1);
     }
 
     #[test]
@@ -283,9 +333,9 @@ mod tests {
         write_departures(&mut output, OutputFormat::Text, &query, true).unwrap();
 
         let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("\x1b[1;36m158\x1b[0m"));
-        assert!(output.contains("\x1b[1mCentre"));
-        assert!(output.contains("\x1b[2m     Nearby stop"));
+        assert!(output.contains(&format!("{LINE_STYLE}158{RESET_STYLE}")));
+        assert!(output.contains(&format!("{EMPHASIS_STYLE}Centre")));
+        assert!(output.contains(&format!("{DIM_STYLE}     Nearby stop")));
     }
 
     #[test]
