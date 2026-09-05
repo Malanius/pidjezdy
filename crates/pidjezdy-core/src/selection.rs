@@ -1,3 +1,5 @@
+use std::cmp::Reverse;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -8,16 +10,6 @@ use crate::departure::Departure;
 pub struct SelectionOptions {
     pub limit: usize,
     pub include_unreachable: bool,
-}
-
-impl SelectionOptions {
-    #[must_use]
-    pub const fn from_config(config: &Config) -> Self {
-        Self {
-            limit: config.display.max_departures,
-            include_unreachable: false,
-        }
-    }
 }
 
 /// A departure enriched with the configured journey to its boarding point.
@@ -50,6 +42,24 @@ struct Candidate {
     configuration_order: usize,
 }
 
+impl Candidate {
+    fn deduplication_key(&self) -> (Reverse<i64>, DateTime<Utc>, usize) {
+        (
+            Reverse(self.selected.leave_in_seconds),
+            self.selected.departure.effective_at(),
+            self.configuration_order,
+        )
+    }
+
+    fn ranking_key(&self) -> (DateTime<Utc>, Reverse<i64>, usize) {
+        (
+            self.selected.departure.effective_at(),
+            Reverse(self.selected.leave_in_seconds),
+            self.configuration_order,
+        )
+    }
+}
+
 /// Match, rank, deduplicate, and limit provider-independent departures.
 ///
 /// Configuration and departure text is expected to have been normalized at
@@ -79,7 +89,7 @@ pub fn select_departures(
                 .iter()
                 .position(|existing| existing.selected.departure.trip_id.eq(trip_id))
         {
-            if better_boarding_point(&candidate, &deduplicated[index]) {
+            if candidate.deduplication_key() < deduplicated[index].deduplication_key() {
                 deduplicated[index] = candidate;
             }
             continue;
@@ -87,26 +97,13 @@ pub fn select_departures(
         deduplicated.push(candidate);
     }
 
-    deduplicated.sort_by(|left, right| {
-        left.selected
-            .departure
-            .effective_at()
-            .cmp(&right.selected.departure.effective_at())
-            .then_with(|| {
-                right
-                    .selected
-                    .leave_in_seconds
-                    .cmp(&left.selected.leave_in_seconds)
-            })
-            .then_with(|| left.configuration_order.cmp(&right.configuration_order))
-    });
+    deduplicated.sort_by_key(Candidate::ranking_key);
 
     let selected = select_candidate_indices(config, &deduplicated, options.limit);
     deduplicated
         .into_iter()
-        .enumerate()
-        .filter(|(index, _)| selected[*index])
-        .map(|(_, candidate)| candidate.selected)
+        .zip(selected)
+        .filter_map(|(candidate, keep)| keep.then_some(candidate.selected))
         .collect()
 }
 
@@ -209,16 +206,6 @@ fn candidate(
         },
         configuration_order,
     }
-}
-
-fn better_boarding_point(candidate: &Candidate, incumbent: &Candidate) -> bool {
-    candidate.selected.leave_in_seconds > incumbent.selected.leave_in_seconds
-        || (candidate.selected.leave_in_seconds == incumbent.selected.leave_in_seconds
-            && (candidate.selected.departure.effective_at()
-                < incumbent.selected.departure.effective_at()
-                || (candidate.selected.departure.effective_at()
-                    == incumbent.selected.departure.effective_at()
-                    && candidate.configuration_order < incumbent.configuration_order)))
 }
 
 const fn floor_minutes(seconds: i64) -> i64 {
