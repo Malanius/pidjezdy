@@ -30,7 +30,12 @@ impl Config {
         Ok(config)
     }
 
-    fn normalize(&mut self) {
+    /// Normalize user-provided text in place.
+    ///
+    /// [`Self::from_toml`] performs this automatically. Callers that construct
+    /// a `Config` directly should normalize it before passing it to departure
+    /// selection.
+    pub fn normalize(&mut self) {
         for quota in &mut self.display.route_quotas {
             quota.line = quota.line.trim().to_owned();
             quota.headsign = quota.headsign.trim().to_owned();
@@ -321,6 +326,32 @@ mod tests {
         assert_eq!(point.routes[0].headsign, "Centrum");
         assert_eq!(config.display.route_quotas[0].line, "158");
         assert_eq!(config.display.route_quotas[0].headsign, "Centrum");
+    }
+
+    #[test]
+    fn programmatic_configs_can_enforce_the_normalized_invariant() {
+        let mut config = Config {
+            display: DisplayConfig::default(),
+            fetch: FetchConfig::default(),
+            boarding_points: vec![BoardingPoint {
+                name: " Nearby stop ".into(),
+                stop_ids: vec![" U123Z1P ".into()],
+                walking_minutes: 4,
+                safety_buffer_minutes: 2,
+                routes: vec![RouteFilter {
+                    line: " 158 ".into(),
+                    headsign: " Centrum ".into(),
+                }],
+            }],
+        };
+
+        config.normalize();
+        config.validate().unwrap();
+
+        assert_eq!(config.boarding_points[0].name, "Nearby stop");
+        assert_eq!(config.boarding_points[0].stop_ids, ["U123Z1P"]);
+        assert_eq!(config.boarding_points[0].routes[0].line, "158");
+        assert_eq!(config.boarding_points[0].routes[0].headsign, "Centrum");
     }
 
     #[test]

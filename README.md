@@ -112,7 +112,9 @@ to configured boarding-point routes, and their sum cannot exceed
 Surrounding whitespace is removed from configured names, stop IDs, lines, and
 headsigns when the file is loaded. PID identifiers and display text are
 normalized the same way before selection, so matching and cache identity use
-one consistent representation.
+one consistent representation. Library callers that construct `Config`
+directly should call `Config::normalize` before selection; `Config::from_toml`
+does this automatically.
 
 Override the configured count for one invocation with `--limit`:
 
