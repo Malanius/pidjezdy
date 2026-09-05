@@ -5,6 +5,7 @@ use clap::ValueEnum;
 use pidjezdy_core::selection::SelectedDeparture;
 use serde::Serialize;
 use thiserror::Error;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub(crate) enum OutputFormat {
@@ -160,7 +161,7 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
 }
 
 fn display_width(value: &str) -> usize {
-    value.chars().count()
+    value.width()
 }
 
 fn pad_right(value: &str, width: usize) -> String {
@@ -268,7 +269,14 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         let lines = output.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 5);
-        assert_eq!(lines[2], "─".repeat(lines[0].chars().count()));
+        assert_eq!(lines[2], "─".repeat(display_width(lines[0])));
+    }
+
+    #[test]
+    fn display_width_uses_terminal_cells_for_unicode() {
+        assert_eq!(display_width("Letňany"), 7);
+        assert_eq!(display_width("Ａ"), 2);
+        assert_eq!(display_width("e\u{301}"), 1);
     }
 
     #[test]
