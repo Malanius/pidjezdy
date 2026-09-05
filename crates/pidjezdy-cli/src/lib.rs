@@ -3,7 +3,8 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
 use pidjezdy_pid::{PidClientError, PidRequestError};
@@ -71,6 +72,11 @@ enum Command {
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
+    },
+    /// Generate a completion script for a supported shell.
+    Completions {
+        /// Shell whose completion script should be generated.
+        shell: Shell,
     },
 }
 
@@ -209,6 +215,13 @@ fn run(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<(), AppError> {
+    if let Command::Completions { shell } = &cli.command {
+        let mut command = Cli::command();
+        let mut script = Vec::new();
+        generate(*shell, &mut command, "pidjezdy", &mut script);
+        return output.write_all(&script).map_err(AppError::WriteOutput);
+    }
+
     let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
         Command::Departures { limit, format } => {
@@ -239,6 +252,7 @@ fn run(
                     .map_err(AppError::WriteOutput)
             }
         },
+        Command::Completions { .. } => unreachable!("completion generation returned above"),
     }
 }
 
@@ -385,6 +399,20 @@ mod tests {
                 .to_string();
             assert!(error.contains("limit must be an integer between 1 and 20"));
         }
+    }
+
+    #[test]
+    fn completions_generates_a_shell_script_without_configuration() {
+        let cli = Cli::try_parse_from(["pidjezdy", "completions", "bash"]).unwrap();
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        run(cli, None, &mut output, &mut diagnostics).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("pidjezdy"));
+        assert!(output.contains("departures"));
+        assert!(diagnostics.is_empty());
     }
 
     #[test]
