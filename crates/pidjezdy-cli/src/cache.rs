@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{Read as _, Write as _};
+use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -162,18 +162,14 @@ fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, Cac
         path: path.to_owned(),
         source,
     })?;
-    let mut input = Vec::new();
-    file.take(MAX_CACHE_BYTES.saturating_add(1))
-        .read_to_end(&mut input)
+    let input = read_at_most(file, MAX_CACHE_BYTES)
         .map_err(|source| CacheReadError::Read {
             path: path.to_owned(),
             source,
-        })?;
-    if u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_CACHE_BYTES {
-        return Err(CacheReadError::TooLarge {
+        })?
+        .ok_or(CacheReadError::TooLarge {
             limit: MAX_CACHE_BYTES,
-        });
-    }
+        })?;
     let cached: CacheFile = serde_json::from_slice(&input).map_err(CacheReadError::Deserialize)?;
     if cached.version != CACHE_VERSION {
         return Err(CacheReadError::UnsupportedVersion(cached.version));
@@ -185,6 +181,15 @@ fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, Cac
         fetched_at: cached.fetched_at,
         departures: cached.departures,
     })
+}
+
+// Kept identical to the PID client helper so the domain core remains I/O-free.
+fn read_at_most(reader: impl Read, limit: u64) -> Result<Option<Vec<u8>>, std::io::Error> {
+    let mut bytes = Vec::new();
+    reader
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    Ok((u64::try_from(bytes.len()).unwrap_or(u64::MAX) <= limit).then_some(bytes))
 }
 
 #[cfg(test)]

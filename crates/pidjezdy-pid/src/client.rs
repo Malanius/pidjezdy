@@ -14,7 +14,7 @@ use crate::response::{PidResponseError, parse_response};
 pub const DEFAULT_ENDPOINT: &str = "https://data.pid.cz/departures/data.php";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
-const MAX_BODY_BYTES: usize = 1024 * 1024;
+const MAX_BODY_BYTES: u64 = 1024 * 1024;
 
 pub struct PidClient {
     http: Client,
@@ -93,12 +93,13 @@ fn decode_body(body: &[u8]) -> Result<Vec<u8>, PidClientError> {
     }
 }
 
-fn read_at_most(reader: impl Read, limit: usize) -> Result<Option<Vec<u8>>, std::io::Error> {
+// Kept identical to the CLI cache helper so the domain core remains I/O-free.
+fn read_at_most(reader: impl Read, limit: u64) -> Result<Option<Vec<u8>>, std::io::Error> {
     let mut bytes = Vec::new();
     reader
-        .take(u64::try_from(limit).unwrap_or(u64::MAX).saturating_add(1))
+        .take(limit.saturating_add(1))
         .read_to_end(&mut bytes)?;
-    Ok((bytes.len() <= limit).then_some(bytes))
+    Ok((u64::try_from(bytes.len()).unwrap_or(u64::MAX) <= limit).then_some(bytes))
 }
 
 #[derive(Debug, Error)]
@@ -112,7 +113,7 @@ pub enum PidClientError {
     #[error("could not read PID response: {0}")]
     ReadBody(std::io::Error),
     #[error("PID response exceeded the {limit}-byte body limit")]
-    ResponseTooLarge { limit: usize },
+    ResponseTooLarge { limit: u64 },
     #[error("PID returned HTTP {status}: {body}")]
     HttpStatus { status: u16, body: String },
     #[error("could not decompress PID response: {0}")]
@@ -155,7 +156,7 @@ mod tests {
 
     #[test]
     fn rejects_oversized_raw_and_decompressed_bodies() {
-        let oversized = vec![b' '; MAX_BODY_BYTES + 1];
+        let oversized = vec![b' '; usize::try_from(MAX_BODY_BYTES).unwrap() + 1];
         assert!(
             read_at_most(oversized.as_slice(), MAX_BODY_BYTES)
                 .unwrap()
