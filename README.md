@@ -1,13 +1,12 @@
 # pidjezdy
 
-Actionable PID departure information for the terminal and, soon, the Omarchy
-top bar.
+Actionable PID departure information for the terminal and the Omarchy top bar.
 
 The project is being built incrementally. The workspace currently provides a
 working CLI with portable user configuration, departure ranking, and a
 defensive adapter for PID's departure-board endpoint. It retains an atomic
-local fallback when PID is temporarily unavailable. The Omarchy plugin will
-arrive in a focused follow-up pull request.
+local fallback when PID is temporarily unavailable, while the Omarchy plugin
+polls that CLI and presents its results in a native bar popup.
 
 The departure endpoint is not officially specified. Its observed contract is
 documented in [`docs/pid-api.md`](docs/pid-api.md).
@@ -155,6 +154,58 @@ timestamps to choose their own policy, while departures naturally age out of
 the configured future window. A cache with an unsupported format, malformed
 content, or a different configuration is rejected instead of being shown.
 
+## Omarchy plugin
+
+The repository is also an Omarchy `bar-widget` plugin. Its bus icon opens a
+native popup containing the closest reachable departures selected by the CLI.
+It defaults to the right side of the bar, polls once per minute, and requests
+three departures so the popup remains compact. The plugin does not run a
+daemon or access PID directly.
+
+The CLI must be installed and configured first. When installing from the Git
+repository:
+
+```bash
+cargo install --git https://github.com/Malanius/pidjezdy --locked pidjezdy
+pidjezdy config init
+```
+
+Edit the resolved configuration and check it as described above, then install
+and enable the plugin:
+
+```bash
+omarchy plugin add https://github.com/Malanius/pidjezdy.git --enable --yes
+```
+
+`malanius.pidjezdy` declares `right` as its default section. It can still be
+moved like any other Omarchy widget:
+
+```bash
+omarchy bar move malanius.pidjezdy --section right
+```
+
+Left-click the icon to toggle the popup. Middle-click, `Enter`, or `r` refreshes
+immediately; `Esc` closes it. The popup advances the CLI's exact countdowns
+between polls and removes a departure as soon as its leave-by time passes, so
+the displayed minutes never overpromise. Failed refreshes retain the previous
+successful result but label the failure, while cached CLI results keep their
+`STALE` label.
+
+The plugin exposes two Omarchy settings:
+
+- `refreshIntervalSec`: polling interval from 30 to 3600 seconds; defaults to
+  60.
+- `limit`: hard CLI result limit from 1 to 20; defaults to 3. Route quota slots
+  are allocated fairly when this is below the configured minimum total.
+
+They can be changed through Omarchy's plugin settings UI or from the command
+line:
+
+```bash
+omarchy bar set malanius.pidjezdy refreshIntervalSec 60
+omarchy bar set malanius.pidjezdy limit 3
+```
+
 ## Development
 
 This repository uses colocated [Jujutsu](https://jj-vcs.github.io/jj/) and Git
@@ -166,6 +217,18 @@ Run the project checks with:
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+node --check Model.js
+node --test tests/model.test.js
+omarchy plugin validate .
+```
+
+For local plugin development, link the checkout into the user plugin
+directory. Omarchy hot-reloads changes:
+
+```bash
+ln -s "$PWD" ~/.config/omarchy/plugins/malanius.pidjezdy
+omarchy-shell shell rescanPlugins
+omarchy plugin enable malanius.pidjezdy
 ```
 
 ## License
