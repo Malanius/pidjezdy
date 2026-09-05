@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::config::{BoardingPoint, Config};
+use crate::config::{BoardingPoint, Config, RouteQuota};
 use crate::departure::Departure;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,11 +98,69 @@ pub fn select_departures(
             .then_with(|| left.configuration_order.cmp(&right.configuration_order))
     });
 
+    let selected = select_candidate_indices(config, &deduplicated, options.limit);
     deduplicated
         .into_iter()
-        .take(options.limit)
-        .map(|candidate| candidate.selected)
+        .enumerate()
+        .filter(|(index, _)| selected[*index])
+        .map(|(_, candidate)| candidate.selected)
         .collect()
+}
+
+fn select_candidate_indices(config: &Config, candidates: &[Candidate], limit: usize) -> Vec<bool> {
+    let mut selected = vec![false; candidates.len()];
+    let mut selected_count = 0;
+    let rounds = config
+        .display
+        .route_quotas
+        .iter()
+        .map(|quota| quota.minimum_departures)
+        .max()
+        .unwrap_or(0);
+
+    for round in 0..rounds {
+        let mut round_candidates = config
+            .display
+            .route_quotas
+            .iter()
+            .filter(|quota| round < quota.minimum_departures)
+            .filter_map(|quota| {
+                candidates
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, candidate)| quota_matches(quota, &candidate.selected.departure))
+                    .nth(round)
+                    .map(|(index, _)| index)
+            })
+            .collect::<Vec<_>>();
+        round_candidates.sort_unstable();
+        round_candidates.dedup();
+
+        for index in round_candidates {
+            if selected_count == limit {
+                return selected;
+            }
+            if !selected[index] {
+                selected[index] = true;
+                selected_count += 1;
+            }
+        }
+    }
+
+    for is_selected in &mut selected {
+        if selected_count == limit {
+            break;
+        }
+        if !*is_selected {
+            *is_selected = true;
+            selected_count += 1;
+        }
+    }
+    selected
+}
+
+fn quota_matches(quota: &RouteQuota, departure: &Departure) -> bool {
+    quota.line.trim() == departure.line.trim() && quota.headsign.trim() == departure.headsign.trim()
 }
 
 fn matching_point<'a>(
@@ -170,7 +228,7 @@ mod tests {
     use chrono::TimeDelta;
 
     use super::*;
-    use crate::config::{BoardingPoint, DisplayConfig, FetchConfig, RouteFilter};
+    use crate::config::{BoardingPoint, DisplayConfig, FetchConfig, RouteFilter, RouteQuota};
     use crate::departure::Vehicle;
 
     fn now() -> DateTime<Utc> {
@@ -194,7 +252,10 @@ mod tests {
 
     fn config(points: Vec<BoardingPoint>) -> Config {
         Config {
-            display: DisplayConfig { max_departures: 3 },
+            display: DisplayConfig {
+                max_departures: 3,
+                route_quotas: Vec::new(),
+            },
             fetch: FetchConfig::default(),
             boarding_points: points,
         }
@@ -213,6 +274,18 @@ mod tests {
             is_cancelled: false,
             vehicle: Vehicle::default(),
         }
+    }
+
+    fn departure_for(
+        trip_id: &str,
+        line: &str,
+        headsign: &str,
+        minutes_after_now: i64,
+    ) -> Departure {
+        let mut departure = departure(trip_id, "U1", minutes_after_now);
+        departure.line = line.into();
+        departure.headsign = headsign.into();
+        departure
     }
 
     fn options(limit: usize) -> SelectionOptions {
@@ -349,6 +422,97 @@ mod tests {
                 .map(|item| item.departure.trip_id.as_str())
                 .collect::<Vec<_>>(),
             ["first", "second"]
+        );
+    }
+
+    #[test]
+    fn reserves_configured_minimums_before_filling_the_global_limit() {
+        let mut configured = config(vec![BoardingPoint {
+            name: "Near".into(),
+            stop_ids: vec!["U1".into()],
+            walking_minutes: 1,
+            safety_buffer_minutes: 0,
+            routes: vec![
+                RouteFilter {
+                    line: "158".into(),
+                    headsign: "Metro".into(),
+                },
+                RouteFilter {
+                    line: "195".into(),
+                    headsign: "Town".into(),
+                },
+            ],
+        }]);
+        configured.display.max_departures = 4;
+        configured.display.route_quotas = vec![RouteQuota {
+            line: "195".into(),
+            headsign: "Town".into(),
+            minimum_departures: 2,
+        }];
+        let departures = [
+            departure_for("158-1", "158", "Metro", 10),
+            departure_for("158-2", "158", "Metro", 11),
+            departure_for("158-3", "158", "Metro", 12),
+            departure_for("195-1", "195", "Town", 20),
+            departure_for("195-2", "195", "Town", 21),
+        ];
+
+        let selected = select_departures(&configured, &departures, now(), options(4));
+        assert_eq!(
+            selected
+                .iter()
+                .map(|item| item.departure.trip_id.as_str())
+                .collect::<Vec<_>>(),
+            ["158-1", "158-2", "195-1", "195-2"]
+        );
+    }
+
+    #[test]
+    fn hard_limit_allocates_quota_slots_fairly_across_routes() {
+        let mut configured = config(vec![BoardingPoint {
+            name: "Near".into(),
+            stop_ids: vec!["U1".into()],
+            walking_minutes: 1,
+            safety_buffer_minutes: 0,
+            routes: vec![
+                RouteFilter {
+                    line: "158".into(),
+                    headsign: "Metro".into(),
+                },
+                RouteFilter {
+                    line: "195".into(),
+                    headsign: "Town".into(),
+                },
+                RouteFilter {
+                    line: "201".into(),
+                    headsign: "Station".into(),
+                },
+            ],
+        }]);
+        configured.display.route_quotas = [("158", "Metro"), ("195", "Town"), ("201", "Station")]
+            .into_iter()
+            .map(|(line, headsign)| RouteQuota {
+                line: line.into(),
+                headsign: headsign.into(),
+                minimum_departures: 2,
+            })
+            .collect();
+        let departures = [
+            departure_for("158-1", "158", "Metro", 10),
+            departure_for("158-2", "158", "Metro", 11),
+            departure_for("195-1", "195", "Town", 20),
+            departure_for("195-2", "195", "Town", 21),
+            departure_for("201-1", "201", "Station", 30),
+            departure_for("201-2", "201", "Station", 31),
+        ];
+
+        let selected = select_departures(&configured, &departures, now(), options(3));
+        assert_eq!(
+            selected
+                .iter()
+                .map(|item| item.departure.trip_id.as_str())
+                .collect::<Vec<_>>(),
+            ["158-1", "195-1", "201-1"]
         );
     }
 

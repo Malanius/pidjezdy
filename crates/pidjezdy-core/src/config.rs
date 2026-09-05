@@ -51,6 +51,7 @@ impl Config {
         }
 
         let mut all_stop_ids = HashSet::new();
+        let mut configured_routes = HashSet::new();
         for (point_index, point) in self.boarding_points.iter().enumerate() {
             let prefix = format!("boarding_points[{point_index}]");
             if point.name.trim().is_empty() {
@@ -89,8 +90,13 @@ impl Config {
                         key.0, key.1
                     ));
                 }
+                if !key.0.is_empty() && !key.1.is_empty() {
+                    configured_routes.insert(key);
+                }
             }
         }
+
+        validate_route_quotas(&self.display, &configured_routes, &mut errors);
 
         if errors.is_empty() {
             Ok(())
@@ -100,18 +106,73 @@ impl Config {
     }
 }
 
+fn validate_route_quotas(
+    display: &DisplayConfig,
+    configured_routes: &HashSet<(&str, &str)>,
+    errors: &mut Vec<String>,
+) {
+    let mut quota_routes = HashSet::new();
+    let mut minimum_total = 0usize;
+    for (quota_index, quota) in display.route_quotas.iter().enumerate() {
+        let prefix = format!("display.route_quotas[{quota_index}]");
+        let key = (quota.line.trim(), quota.headsign.trim());
+        if key.0.is_empty() {
+            errors.push(format!("{prefix}.line must not be empty"));
+        }
+        if key.1.is_empty() {
+            errors.push(format!("{prefix}.headsign must not be empty"));
+        }
+        if (1..=20).contains(&quota.minimum_departures) {
+            minimum_total = minimum_total.saturating_add(quota.minimum_departures);
+        } else {
+            errors.push(format!(
+                "{prefix}.minimum_departures must be between 1 and 20"
+            ));
+        }
+        if !key.0.is_empty() && !key.1.is_empty() {
+            if !quota_routes.insert(key) {
+                errors.push(format!(
+                    "{prefix} duplicates line {:?} toward {:?}",
+                    key.0, key.1
+                ));
+            }
+            if !configured_routes.contains(&key) {
+                errors.push(format!(
+                    "{prefix} does not match a configured boarding-point route"
+                ));
+            }
+        }
+    }
+    if minimum_total > display.max_departures {
+        errors.push(format!(
+            "display route minimums total {minimum_total}, exceeding display.max_departures {}",
+            display.max_departures
+        ));
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct DisplayConfig {
     pub max_departures: usize,
+    pub route_quotas: Vec<RouteQuota>,
 }
 
 impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             max_departures: DEFAULT_MAX_DEPARTURES,
+            route_quotas: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RouteQuota {
+    pub line: String,
+    pub headsign: String,
+    pub minimum_departures: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -191,6 +252,7 @@ mod tests {
     fn parses_defaults() {
         let config = Config::from_toml(VALID).unwrap();
         assert_eq!(config.display.max_departures, 3);
+        assert!(config.display.route_quotas.is_empty());
         assert_eq!(config.fetch.minutes_after, 120);
         assert_eq!(config.fetch.api_limit, 20);
         assert_eq!(config.boarding_points[0].safety_buffer_minutes, 2);
@@ -205,7 +267,10 @@ mod tests {
     #[test]
     fn reports_multiple_validation_errors() {
         let config = Config {
-            display: DisplayConfig { max_departures: 0 },
+            display: DisplayConfig {
+                max_departures: 0,
+                route_quotas: Vec::new(),
+            },
             fetch: FetchConfig {
                 minutes_after: 0,
                 api_limit: 21,
@@ -235,5 +300,57 @@ mod tests {
         let error = Config::from_toml(input).unwrap_err().to_string();
         assert!(error.contains("configured more than once"));
         assert!(error.contains("duplicates line"));
+    }
+
+    #[test]
+    fn parses_valid_route_quotas() {
+        let input = format!(
+            r#"
+                [display]
+                max_departures = 4
+
+                [[display.route_quotas]]
+                line = "158"
+                headsign = "Centrum"
+                minimum_departures = 2
+
+                {VALID}
+            "#
+        );
+        let config = Config::from_toml(&input).unwrap();
+        assert_eq!(config.display.route_quotas.len(), 1);
+        assert_eq!(config.display.route_quotas[0].minimum_departures, 2);
+    }
+
+    #[test]
+    fn validates_route_quotas() {
+        let input = format!(
+            r#"
+                [display]
+                max_departures = 2
+
+                [[display.route_quotas]]
+                line = "158"
+                headsign = "Centrum"
+                minimum_departures = 2
+
+                [[display.route_quotas]]
+                line = "158"
+                headsign = "Centrum"
+                minimum_departures = 2
+
+                [[display.route_quotas]]
+                line = "999"
+                headsign = "Nowhere"
+                minimum_departures = 0
+
+                {VALID}
+            "#
+        );
+        let error = Config::from_toml(&input).unwrap_err().to_string();
+        assert!(error.contains("duplicates line"));
+        assert!(error.contains("must be between 1 and 20"));
+        assert!(error.contains("does not match a configured boarding-point route"));
+        assert!(error.contains("route minimums total 4"));
     }
 }
