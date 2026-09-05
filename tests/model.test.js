@@ -25,10 +25,24 @@ function output(overrides = {}) {
 
 test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.refreshInterval(undefined), 60)
+  assert.equal(Model.refreshInterval(null), 60)
+  assert.equal(Model.refreshInterval(""), 60)
+  assert.equal(Model.refreshInterval("  "), 60)
+  assert.equal(Model.refreshInterval(false), 60)
+  assert.equal(Model.refreshInterval([]), 60)
   assert.equal(Model.refreshInterval(5), 30)
   assert.equal(Model.refreshInterval("120"), 120)
   assert.equal(Model.departureLimit(undefined), 3)
+  assert.equal(Model.departureLimit(null), 3)
+  assert.equal(Model.departureLimit(""), 3)
+  assert.equal(Model.departureLimit({}), 3)
   assert.equal(Model.departureLimit(50), 20)
+})
+
+test("command errors strip only the exact CLI prefix", () => {
+  assert.equal(Model.commandError("pidjezdy: request failed\nmore detail", 1), "request failed")
+  assert.equal(Model.commandError("another command failed", 1), "another command failed")
+  assert.equal(Model.commandError("", 7), "pidjezdy exited with status 7")
 })
 
 test("parseOutput validates and flattens the CLI envelope", () => {
@@ -88,4 +102,14 @@ test("tooltip describes the nearest current departure and stale state", () => {
   assert.equal(Model.tooltip(report, now, "", false), "STALE · 158 → Letňany · leave in 4 min")
   assert.equal(Model.updateLabel(report, now), "STALE · updated 3 min ago")
   assert.equal(Model.tooltip(null, now, "command failed", false), "PID departures · command failed")
+})
+
+test("tooltip marks retained departures when the latest refresh failed", () => {
+  const report = Model.parseOutput(output({ stale: false }))
+  const now = Date.parse("2026-09-05T08:00:30Z")
+
+  assert.equal(
+    Model.tooltip(report, now, "request failed", false),
+    "⚠ 158 → Letňany · leave in 4 min"
+  )
 })
