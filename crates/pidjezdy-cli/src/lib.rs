@@ -24,6 +24,12 @@ pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"# pidjezdy configuration
 [display]
 max_departures = 3
 
+# Reserve space for important routes before filling the remaining result slots.
+[[display.route_quotas]]
+line = "123"
+headsign = "City centre"
+minimum_departures = 2
+
 [fetch]
 minutes_after = 120
 api_limit = 20
@@ -54,7 +60,7 @@ pub struct Cli {
 enum Command {
     /// Show the next reachable configured departures.
     Departures {
-        /// Override `display.max_departures` for this invocation.
+        /// Apply a hard result limit, allocating quota slots fairly when constrained.
         #[arg(long, value_parser = parse_departure_limit)]
         limit: Option<usize>,
         /// Select human-readable or machine-readable output.

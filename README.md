@@ -36,7 +36,10 @@ existing file.
 
 The main settings are:
 
-- `display.max_departures`: default number of results to show, from 1 to 20.
+- `display.max_departures`: overall number of results to show, from 1 to 20.
+- `display.route_quotas`: optional minimum numbers of departures to reserve for
+  particular line and direction pairs before filling the remaining result
+  slots chronologically.
 - `fetch.minutes_after`: future window requested from PID, in minutes.
 - `fetch.api_limit`: result limit applied independently to each configured
   boarding point, from 1 to 20.
@@ -48,7 +51,12 @@ For example:
 
 ```toml
 [display]
-max_departures = 3
+max_departures = 4
+
+[[display.route_quotas]]
+line = "123"
+headsign = "City centre"
+minimum_departures = 2
 
 [fetch]
 minutes_after = 120
@@ -83,11 +91,26 @@ Text output is compact and rounds time down conservatively:
 123 → City centre · Nearby stop · platform A · leave in 4 min · departs in 10 min
 ```
 
+The selector first reserves up to each route's configured minimum, when that
+many matching departures are available, and then fills unused result slots
+with the nearest departures overall. A quota matches the trimmed `line` and
+`headsign` across all boarding points, so one physical trip appearing at
+multiple configured stops remains a single result. Route minimums must refer
+to configured boarding-point routes, and their sum cannot exceed
+`display.max_departures`.
+
 Override the configured count for one invocation with `--limit`:
 
 ```console
 pidjezdy departures --limit 2
 ```
+
+The command-line limit is a hard ceiling even when it is smaller than the
+configured route minimums. Constrained slots are allocated in rounds: the
+nearest departure from each quota route is considered before a second
+departure from any route. The selected results are then printed in departure
+order. This makes a small limit useful for compact consumers without allowing
+one frequent route to take every slot.
 
 A departure is reachable when its predicted time, or scheduled time when no
 prediction exists, leaves at least the configured walking time plus safety
