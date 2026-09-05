@@ -517,6 +517,103 @@ mod tests {
     }
 
     #[test]
+    fn quota_shortfall_spills_into_chronological_fill() {
+        let mut configured = quota_config(4);
+        let departures = [
+            departure_for("158-1", "158", "Metro", 10),
+            departure_for("unreserved", "100", "Local", 11),
+            departure_for("195-1", "195", "Town", 20),
+            departure_for("195-2", "195", "Town", 21),
+        ];
+
+        configured.display.route_quotas = vec![quota("158", "Metro", 2), quota("195", "Town", 2)];
+        let selected = select_departures(&configured, &departures, now(), options(4));
+
+        assert_eq!(
+            trip_ids(&selected),
+            ["158-1", "unreserved", "195-1", "195-2"]
+        );
+    }
+
+    #[test]
+    fn hard_limit_smaller_than_quota_count_uses_earliest_routes() {
+        let mut configured = quota_config(3);
+        configured.display.route_quotas = vec![
+            quota("158", "Metro", 1),
+            quota("195", "Town", 1),
+            quota("201", "Station", 1),
+        ];
+        let departures = [
+            departure_for("158-1", "158", "Metro", 10),
+            departure_for("195-1", "195", "Town", 20),
+            departure_for("201-1", "201", "Station", 30),
+        ];
+
+        let selected = select_departures(&configured, &departures, now(), options(2));
+
+        assert_eq!(trip_ids(&selected), ["158-1", "195-1"]);
+    }
+
+    #[test]
+    fn empty_quota_route_does_not_block_generic_fill() {
+        let mut configured = quota_config(3);
+        configured.display.route_quotas =
+            vec![quota("158", "Metro", 2), quota("201", "Station", 1)];
+        let departures = [
+            departure_for("158-1", "158", "Metro", 10),
+            departure_for("unreserved", "100", "Local", 11),
+            departure_for("158-2", "158", "Metro", 12),
+        ];
+
+        let selected = select_departures(&configured, &departures, now(), options(3));
+
+        assert_eq!(trip_ids(&selected), ["158-1", "unreserved", "158-2"]);
+    }
+
+    fn quota_config(max_departures: usize) -> Config {
+        Config {
+            display: DisplayConfig {
+                max_departures,
+                route_quotas: Vec::new(),
+            },
+            fetch: FetchConfig::default(),
+            boarding_points: vec![BoardingPoint {
+                name: "Near".into(),
+                stop_ids: vec!["U1".into()],
+                walking_minutes: 1,
+                safety_buffer_minutes: 0,
+                routes: [
+                    ("100", "Local"),
+                    ("158", "Metro"),
+                    ("195", "Town"),
+                    ("201", "Station"),
+                ]
+                .into_iter()
+                .map(|(line, headsign)| RouteFilter {
+                    line: line.into(),
+                    headsign: headsign.into(),
+                })
+                .collect(),
+            }],
+        }
+    }
+
+    fn quota(line: &str, headsign: &str, minimum_departures: usize) -> RouteQuota {
+        RouteQuota {
+            line: line.into(),
+            headsign: headsign.into(),
+            minimum_departures,
+        }
+    }
+
+    fn trip_ids(departures: &[SelectedDeparture]) -> Vec<&str> {
+        departures
+            .iter()
+            .map(|departure| departure.departure.trip_id.as_str())
+            .collect()
+    }
+
+    #[test]
     fn rounds_minutes_down_conservatively() {
         let mut selected = SelectedDeparture {
             departure: departure("trip", "U1", 10),
