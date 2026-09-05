@@ -51,6 +51,9 @@ struct Candidate {
 }
 
 /// Match, rank, deduplicate, and limit provider-independent departures.
+///
+/// Configuration and departure text is expected to have been normalized at
+/// its parsing or provider boundary.
 #[must_use]
 pub fn select_departures(
     config: &Config,
@@ -70,11 +73,11 @@ pub fn select_departures(
 
     let mut deduplicated: Vec<Candidate> = Vec::new();
     for candidate in candidates {
-        let trip_id = candidate.selected.departure.trip_id.trim();
+        let trip_id = &candidate.selected.departure.trip_id;
         if !trip_id.is_empty()
             && let Some(index) = deduplicated
                 .iter()
-                .position(|existing| existing.selected.departure.trip_id.trim() == trip_id)
+                .position(|existing| existing.selected.departure.trip_id.eq(trip_id))
         {
             if better_boarding_point(&candidate, &deduplicated[index]) {
                 deduplicated[index] = candidate;
@@ -160,7 +163,7 @@ fn select_candidate_indices(config: &Config, candidates: &[Candidate], limit: us
 }
 
 fn quota_matches(quota: &RouteQuota, departure: &Departure) -> bool {
-    quota.line.trim() == departure.line.trim() && quota.headsign.trim() == departure.headsign.trim()
+    quota.line == departure.line && quota.headsign == departure.headsign
 }
 
 fn matching_point<'a>(
@@ -175,10 +178,9 @@ fn matching_point<'a>(
             point
                 .stop_ids
                 .iter()
-                .any(|stop_id| stop_id.trim() == departure.stop_id.trim())
+                .any(|stop_id| stop_id == &departure.stop_id)
                 && point.routes.iter().any(|route| {
-                    route.line.trim() == departure.line.trim()
-                        && route.headsign.trim() == departure.headsign.trim()
+                    route.line == departure.line && route.headsign == departure.headsign
                 })
         })
         .map(|(index, point)| (point, index))

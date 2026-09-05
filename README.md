@@ -103,11 +103,18 @@ contains terminal styling.
 
 The selector first reserves up to each route's configured minimum, when that
 many matching departures are available, and then fills unused result slots
-with the nearest departures overall. A quota matches the trimmed `line` and
+with the nearest departures overall. A quota matches the normalized `line` and
 `headsign` across all boarding points, so one physical trip appearing at
 multiple configured stops remains a single result. Route minimums must refer
 to configured boarding-point routes, and their sum cannot exceed
 `display.max_departures`.
+
+Surrounding whitespace is removed from configured names, stop IDs, lines, and
+headsigns when the file is loaded. PID identifiers and display text are
+normalized the same way before selection, so matching and cache identity use
+one consistent representation. Library callers that construct `Config`
+directly should call `Config::normalize` before selection; `Config::from_toml`
+does this automatically.
 
 Override the configured count for one invocation with `--limit`:
 

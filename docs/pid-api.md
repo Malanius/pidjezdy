@@ -80,6 +80,10 @@ Fields consumed by `pidjezdy` are:
 | `trip.is_canceled` | Cancellation flag, normalized to `is_cancelled`. |
 | `vehicle` | Nullable vehicle object; `id`, `is_wheelchair_accessible`, `is_air_conditioned`, and `has_charger` are retained when supplied. |
 
+Surrounding whitespace is removed from the textual identifiers, line,
+headsign, platform code, and vehicle ID before the provider model is passed to
+the core selector.
+
 The response also contains a server-calculated `minutes` value and fields not
 used by this project. Unknown fields are intentionally tolerated. `pidjezdy`
 calculates time-to-departure from the timestamps so ranking uses a consistent

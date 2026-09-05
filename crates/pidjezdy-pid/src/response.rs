@@ -93,10 +93,10 @@ struct ApiDeparture {
 impl ApiDeparture {
     fn normalize(self) -> Departure {
         Departure {
-            trip_id: self.trip.id,
-            line: self.route.short_name,
-            headsign: self.trip.headsign,
-            stop_id: self.stop.id,
+            trip_id: normalize_text(self.trip.id),
+            line: normalize_text(self.route.short_name),
+            headsign: normalize_text(self.trip.headsign),
+            stop_id: normalize_text(self.stop.id),
             platform_code: non_empty(self.stop.platform_code),
             scheduled_at: self.departure.timestamp_scheduled.to_utc(),
             predicted_at: self
@@ -165,7 +165,21 @@ impl ApiVehicle {
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
-    value.filter(|text| !text.trim().is_empty())
+    value.and_then(|text| {
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(normalize_text(text))
+        }
+    })
+}
+
+fn normalize_text(value: String) -> String {
+    if value.trim().len() == value.len() {
+        value
+    } else {
+        value.trim().to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -203,6 +217,41 @@ mod tests {
         assert_eq!(untracked.delay_seconds, None);
         assert_eq!(untracked.platform_code, None);
         assert_eq!(untracked.vehicle, Vehicle::default());
+    }
+
+    #[test]
+    fn trims_provider_identifiers_and_display_text() {
+        let body = String::from_utf8(DEPARTURES.to_vec())
+            .unwrap()
+            .replace("158_100_260901", " 158_100_260901 ")
+            .replace("\"short_name\": \"158\"", "\"short_name\": \" 158 \"")
+            .replace("\"headsign\": \"Centrum\"", "\"headsign\": \" Centrum \"")
+            .replace("\"id\": \"U100Z1P\"", "\"id\": \" U100Z1P \"")
+            .replace("\"platform_code\": \"A\"", "\"platform_code\": \" A \"")
+            .replace("\"id\": \"vehicle-1\"", "\"id\": \" vehicle-1 \"");
+        assert!(body.contains("\"short_name\": \" 158 \""));
+        assert!(body.contains("\"id\": \" U100Z1P \""));
+
+        let tracked = &parse_response(body.as_bytes()).unwrap()[0];
+
+        assert_eq!(tracked.trip_id, "158_100_260901");
+        assert_eq!(tracked.line, "158");
+        assert_eq!(tracked.headsign, "Centrum");
+        assert_eq!(tracked.stop_id, "U100Z1P");
+        assert_eq!(tracked.platform_code.as_deref(), Some("A"));
+        assert_eq!(tracked.vehicle.id.as_deref(), Some("vehicle-1"));
+    }
+
+    #[test]
+    fn normalization_reuses_clean_strings_and_discards_blank_options() {
+        let clean = "already normalized".to_owned();
+        let allocation = clean.as_ptr();
+
+        let normalized = normalize_text(clean);
+
+        assert_eq!(normalized, "already normalized");
+        assert_eq!(normalized.as_ptr(), allocation);
+        assert_eq!(non_empty(Some("   ".into())), None);
     }
 
     #[test]
