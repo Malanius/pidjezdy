@@ -120,6 +120,8 @@ fn configured_request(config: &Config) -> Result<DepartureBoardRequest, PidReque
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use chrono::TimeDelta;
     use pidjezdy_core::departure::{Departure, Vehicle};
     use url::Url;
@@ -278,5 +280,30 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn describes_a_missing_fallback_without_a_filesystem_error() {
+        let missing = PathBuf::from("/cache/departures.json");
+        let error = finish_query_with(
+            &fallback_config(),
+            3,
+            now(),
+            Err(live_error()),
+            |_| unreachable!("a failed live request must not update the cache"),
+            || {
+                Err(CacheReadError::NotFound {
+                    path: missing.clone(),
+                })
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("cached fallback unavailable: no cached departures available yet")
+        );
+        assert!(!error.to_string().contains("os error"));
     }
 }
