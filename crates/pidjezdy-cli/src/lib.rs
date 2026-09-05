@@ -1,6 +1,6 @@
 use std::env;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -178,10 +178,15 @@ impl From<OutputError> for AppError {
 pub fn run_from_env() -> Result<(), AppError> {
     let cli = Cli::parse();
     let env_path = env::var_os(CONFIG_ENV).map(PathBuf::from);
+    let mut stdout = std::io::stdout();
+    let styled_text = stdout.is_terminal()
+        && env::var_os("NO_COLOR").is_none()
+        && env::var_os("TERM").is_none_or(|term| term != "dumb");
     run(
         cli,
         env_path.as_deref(),
-        &mut std::io::stdout(),
+        styled_text,
+        &mut stdout,
         &mut std::io::stderr(),
     )
 }
@@ -212,6 +217,7 @@ pub fn resolve_config_path(
 fn run(
     cli: Cli,
     env_path: Option<&Path>,
+    styled_text: bool,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<(), AppError> {
@@ -238,6 +244,7 @@ fn run(
                 query.data_updated_at,
                 query.stale,
                 &query.departures,
+                styled_text,
             )?;
             Ok(())
         }
@@ -367,7 +374,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        run(cli, None, &mut output, &mut diagnostics).unwrap();
+        run(cli, None, false, &mut output, &mut diagnostics).unwrap();
 
         assert!(
             String::from_utf8(output)
@@ -407,7 +414,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        run(cli, None, &mut output, &mut diagnostics).unwrap();
+        run(cli, None, false, &mut output, &mut diagnostics).unwrap();
 
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("pidjezdy"));

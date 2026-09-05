@@ -5,6 +5,7 @@ use clap::ValueEnum;
 use pidjezdy_core::selection::SelectedDeparture;
 use serde::Serialize;
 use thiserror::Error;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub(crate) enum OutputFormat {
@@ -41,10 +42,18 @@ pub(crate) fn write_departures(
     data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &[SelectedDeparture],
+    styled_text: bool,
 ) -> Result<(), OutputError> {
     match format {
         OutputFormat::Text => {
-            write_text(output, generated_at, data_updated_at, stale, departures)?;
+            write_text(
+                output,
+                generated_at,
+                data_updated_at,
+                stale,
+                departures,
+                styled_text,
+            )?;
         }
         OutputFormat::Json => {
             let document = serde_json::to_string(&JsonOutput {
@@ -65,6 +74,7 @@ fn write_text(
     data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &[SelectedDeparture],
+    styled: bool,
 ) -> Result<(), std::io::Error> {
     if stale {
         let age_minutes = (generated_at - data_updated_at).num_minutes().max(0);
@@ -74,7 +84,59 @@ fn write_text(
         return writeln!(output, "No reachable departures.");
     }
 
-    for selected in departures {
+    let rows = departures.iter().map(TextRow::from).collect::<Vec<_>>();
+    let line_width = rows
+        .iter()
+        .map(|row| display_width(row.line))
+        .max()
+        .unwrap_or(0);
+    let detail_width = rows
+        .iter()
+        .flat_map(|row| [display_width(row.headsign), display_width(&row.boarding)])
+        .max()
+        .unwrap_or(0);
+    let time_width = rows
+        .iter()
+        .flat_map(|row| [display_width(&row.leave), display_width(&row.departs)])
+        .max()
+        .unwrap_or(0);
+    let separator = "─".repeat(line_width + detail_width + time_width + 4);
+
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            write_styled_line(output, styled, "\x1b[2m", &separator)?;
+        }
+
+        let line = pad_right(row.line, line_width);
+        let headsign = pad_right(row.headsign, detail_width);
+        let leave = pad_left(&row.leave, time_width);
+        if styled {
+            writeln!(
+                output,
+                "\x1b[1;36m{line}\x1b[0m  \x1b[1m{headsign}\x1b[0m  \x1b[1m{leave}\x1b[0m"
+            )?;
+        } else {
+            writeln!(output, "{line}  {headsign}  {leave}")?;
+        }
+
+        let boarding = pad_right(&row.boarding, detail_width);
+        let departs = pad_left(&row.departs, time_width);
+        let secondary = format!("{}  {boarding}  {departs}", " ".repeat(line_width));
+        write_styled_line(output, styled, "\x1b[2m", &secondary)?;
+    }
+    Ok(())
+}
+
+struct TextRow<'a> {
+    line: &'a str,
+    headsign: &'a str,
+    boarding: String,
+    leave: String,
+    departs: String,
+}
+
+impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
+    fn from(selected: &'a SelectedDeparture) -> Self {
         let departure = &selected.departure;
         let platform = departure
             .platform_code
@@ -87,17 +149,46 @@ fn write_text(
         } else {
             format!("leave in {} min", selected.leave_in_minutes())
         };
-        writeln!(
-            output,
-            "{} → {} · {}{} · {leave} · departs in {} min",
-            departure.line,
-            departure.headsign,
-            selected.boarding_point_name,
-            platform,
-            selected.departs_in_minutes(),
-        )?;
+
+        Self {
+            line: &departure.line,
+            headsign: &departure.headsign,
+            boarding: format!("{}{platform}", selected.boarding_point_name),
+            leave,
+            departs: format!("departs in {} min", selected.departs_in_minutes()),
+        }
     }
-    Ok(())
+}
+
+fn display_width(value: &str) -> usize {
+    value.width()
+}
+
+fn pad_right(value: &str, width: usize) -> String {
+    format!(
+        "{value}{}",
+        " ".repeat(width.saturating_sub(display_width(value)))
+    )
+}
+
+fn pad_left(value: &str, width: usize) -> String {
+    format!(
+        "{}{value}",
+        " ".repeat(width.saturating_sub(display_width(value)))
+    )
+}
+
+fn write_styled_line(
+    output: &mut impl Write,
+    styled: bool,
+    style: &str,
+    value: &str,
+) -> Result<(), std::io::Error> {
+    if styled {
+        writeln!(output, "{style}{value}\x1b[0m")
+    } else {
+        writeln!(output, "{value}")
+    }
 }
 
 #[cfg(test)]
@@ -137,7 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn text_output_is_compact_and_conservative() {
+    fn text_output_uses_aligned_two_line_layout() {
         let mut output = Vec::new();
         write_departures(
             &mut output,
@@ -146,13 +237,67 @@ mod tests {
             now(),
             false,
             &[selected()],
+            false,
         )
         .unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "158 → Centre · Nearby stop · platform A · leave in 4 min · departs in 10 min\n"
+            concat!(
+                "158  Centre                       leave in 4 min\n",
+                "     Nearby stop · platform A  departs in 10 min\n"
+            )
         );
+    }
+
+    #[test]
+    fn text_output_separates_full_width_records() {
+        let departures = [selected(), selected()];
+        let mut output = Vec::new();
+
+        write_departures(
+            &mut output,
+            OutputFormat::Text,
+            now(),
+            now(),
+            false,
+            &departures,
+            false,
+        )
+        .unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        let lines = output.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[2], "─".repeat(display_width(lines[0])));
+    }
+
+    #[test]
+    fn display_width_uses_terminal_cells_for_unicode() {
+        assert_eq!(display_width("Letňany"), 7);
+        assert_eq!(display_width("Ａ"), 2);
+        assert_eq!(display_width("e\u{301}"), 1);
+    }
+
+    #[test]
+    fn styled_text_emphasizes_primary_and_dims_secondary_content() {
+        let mut output = Vec::new();
+
+        write_departures(
+            &mut output,
+            OutputFormat::Text,
+            now(),
+            now(),
+            false,
+            &[selected()],
+            true,
+        )
+        .unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("\x1b[1;36m158\x1b[0m"));
+        assert!(output.contains("\x1b[1mCentre"));
+        assert!(output.contains("\x1b[2m     Nearby stop"));
     }
 
     #[test]
@@ -167,12 +312,22 @@ mod tests {
             now(),
             false,
             &[departure],
+            false,
         )
         .unwrap();
         assert!(String::from_utf8(output).unwrap().contains("leave now"));
 
         let mut empty = Vec::new();
-        write_departures(&mut empty, OutputFormat::Text, now(), now(), false, &[]).unwrap();
+        write_departures(
+            &mut empty,
+            OutputFormat::Text,
+            now(),
+            now(),
+            false,
+            &[],
+            false,
+        )
+        .unwrap();
         assert_eq!(
             String::from_utf8(empty).unwrap(),
             "No reachable departures.\n"
@@ -189,6 +344,7 @@ mod tests {
             now() - TimeDelta::minutes(3),
             true,
             &[selected()],
+            false,
         )
         .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
@@ -210,6 +366,7 @@ mod tests {
             now() - TimeDelta::seconds(190),
             true,
             &[selected()],
+            false,
         )
         .unwrap();
 

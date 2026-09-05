@@ -84,11 +84,22 @@ Show the configured number of reachable departures with:
 pidjezdy departures
 ```
 
-Text output is compact and rounds time down conservatively:
+Human-readable output uses aligned two-line records separated at the full
+rendered width. It rounds time down conservatively:
 
 ```text
-123 → City centre · Nearby stop · platform A · leave in 4 min · departs in 10 min
+123  City centre                  leave in 4 min
+     Nearby stop · platform A  departs in 10 min
+────────────────────────────────────────────────
+456  Main station                leave in 7 min
+     Other stop · platform C   departs in 15 min
 ```
+
+On an interactive terminal, the line, direction, and leave-by time are
+emphasized while secondary details and separators are dimmed. ANSI styling is
+automatically omitted when output is redirected or piped, and can also be
+disabled by setting [`NO_COLOR`](https://no-color.org/). JSON output never
+contains terminal styling.
 
 The selector first reserves up to each route's configured minimum, when that
 many matching departures are available, and then fills unused result slots
