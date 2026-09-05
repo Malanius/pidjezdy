@@ -4,7 +4,9 @@
 // polls. No Qt imports are used so the behavior stays testable with Node.
 
 function boundedInteger(value, fallback, minimum, maximum) {
-  var parsed = Math.floor(Number(value))
+  var numeric = typeof value === "number"
+    || (typeof value === "string" && value.trim() !== "")
+  var parsed = numeric ? Math.floor(Number(value)) : NaN
   if (!isFinite(parsed)) parsed = fallback
   return Math.max(minimum, Math.min(maximum, parsed))
 }
@@ -120,11 +122,19 @@ function updateLabel(report, nowMs) {
   return (report.stale ? "STALE · " : "") + "updated " + ageMinutes + " min ago"
 }
 
+function commandError(stderrText, exitCode) {
+  var prefix = "pidjezdy: "
+  var message = String(stderrText || "").trim().split("\n")[0]
+  if (message.indexOf(prefix) === 0) message = message.substring(prefix.length)
+  return message || "pidjezdy exited with status " + exitCode
+}
+
 function tooltip(report, nowMs, errorMessage, loading) {
   var rows = currentDepartures(report, nowMs)
   if (rows.length > 0) {
     var first = rows[0]
-    var prefix = report && report.stale ? "STALE · " : ""
+    var prefix = errorMessage ? "⚠ " : ""
+    if (report && report.stale) prefix += "STALE · "
     return prefix + first.line + " → " + first.headsign + " · " + leaveLabel(first.leaveSeconds)
   }
   if (errorMessage) return "PID departures · " + errorMessage
@@ -145,6 +155,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
     updateLabel: updateLabel,
+    commandError: commandError,
     tooltip: tooltip
   }
 }

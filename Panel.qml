@@ -68,9 +68,7 @@ Panel {
         errorMessage = parsed.error
       }
     } else {
-      var message = String(stderrText || "").trim().split("\n")[0]
-      if (message.indexOf("pidjezdy: ") === 0) message = message.substring(11)
-      errorMessage = message || "pidjezdy exited with status " + exitCode
+      errorMessage = Model.commandError(stderrText, exitCode)
     }
 
     if (refreshQueued) {
