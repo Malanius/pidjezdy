@@ -211,6 +211,11 @@ timestamps to choose their own policy, while departures naturally age out of
 the configured future window. A cache with an unsupported format, malformed
 content, or a different configuration is rejected instead of being shown.
 
+Fatal diagnostics keep the first stderr line concise for status-bar consumers,
+then print each distinct underlying cause on an indented line. PID transport
+errors retain useful details such as timeouts or refused connections, while
+request URLs and configured stop IDs are omitted from the default report.
+
 ## Omarchy plugin
 
 The repository is also an Omarchy `bar-widget` plugin. Its bus icon opens a
