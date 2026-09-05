@@ -221,45 +221,38 @@ fn run(
     output: &mut impl Write,
     diagnostics: &mut impl Write,
 ) -> Result<(), AppError> {
-    if let Command::Completions { shell } = &cli.command {
-        let mut command = Cli::command();
-        let mut script = Vec::new();
-        generate(*shell, &mut command, "pidjezdy", &mut script);
-        return output.write_all(&script).map_err(AppError::WriteOutput);
-    }
-
-    let path = resolve_config_path(cli.config.as_deref(), env_path)?;
     match cli.command {
         Command::Departures { limit, format } => {
+            let path = resolve_config_path(cli.config.as_deref(), env_path)?;
             let config = load_config(&path)?;
             let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
-            if let Some(warning) = query.cache_warning {
+            if let Some(warning) = &query.cache_warning {
                 writeln!(diagnostics, "pidjezdy: warning: {warning}")
                     .map_err(AppError::WriteDiagnostics)?;
             }
-            write_departures(
-                output,
-                format,
-                query.generated_at,
-                query.data_updated_at,
-                query.stale,
-                &query.departures,
-                styled_text,
-            )?;
+            write_departures(output, format, &query, styled_text)?;
             Ok(())
         }
-        Command::Config { command } => match command {
-            ConfigCommand::Path => {
-                writeln!(output, "{}", path.display()).map_err(AppError::WriteOutput)
+        Command::Config { command } => {
+            let path = resolve_config_path(cli.config.as_deref(), env_path)?;
+            match command {
+                ConfigCommand::Path => {
+                    writeln!(output, "{}", path.display()).map_err(AppError::WriteOutput)
+                }
+                ConfigCommand::Init => init_config(&path, output),
+                ConfigCommand::Check => {
+                    load_config(&path)?;
+                    writeln!(output, "configuration is valid: {}", path.display())
+                        .map_err(AppError::WriteOutput)
+                }
             }
-            ConfigCommand::Init => init_config(&path, output),
-            ConfigCommand::Check => {
-                load_config(&path)?;
-                writeln!(output, "configuration is valid: {}", path.display())
-                    .map_err(AppError::WriteOutput)
-            }
-        },
-        Command::Completions { .. } => unreachable!("completion generation returned above"),
+        }
+        Command::Completions { shell } => {
+            let mut command = Cli::command();
+            let mut script = Vec::new();
+            generate(shell, &mut command, "pidjezdy", &mut script);
+            output.write_all(&script).map_err(AppError::WriteOutput)
+        }
     }
 }
 

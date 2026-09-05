@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use pidjezdy_core::config::Config;
+use pidjezdy_core::departure::Departure;
 use pidjezdy_core::selection::{SelectedDeparture, SelectionOptions, select_departures};
 use pidjezdy_pid::{DepartureBoardRequest, PidClient, PidClientError, PidRequestError};
 use thiserror::Error;
@@ -13,6 +14,12 @@ pub(crate) struct DepartureQuery {
     pub(crate) stale: bool,
     pub(crate) departures: Vec<SelectedDeparture>,
     pub(crate) cache_warning: Option<CacheWriteError>,
+}
+
+struct QuerySources<WriteCache, ReadCache> {
+    live: Result<Vec<Departure>, LiveDepartureError>,
+    write_cache: WriteCache,
+    read_cache: ReadCache,
 }
 
 #[derive(Debug, Error)]
@@ -49,41 +56,38 @@ pub(crate) fn query_departures(
         .map_err(LiveDepartureError::CreateClient)
         .and_then(|client| client.fetch(&request).map_err(LiveDepartureError::Fetch));
     let generated_at = Utc::now();
-    finish_query(config, limit, generated_at, live)
-}
-
-fn finish_query(
-    config: &Config,
-    limit: usize,
-    generated_at: DateTime<Utc>,
-    live: Result<Vec<pidjezdy_core::departure::Departure>, LiveDepartureError>,
-) -> Result<DepartureQuery, DepartureQueryError> {
     finish_query_with(
         config,
         limit,
         generated_at,
-        live,
-        |departures| write_snapshot(config, generated_at, departures),
-        || read_snapshot(config),
+        QuerySources {
+            live,
+            write_cache: |departures: &[Departure]| {
+                write_snapshot(config, generated_at, departures)
+            },
+            read_cache: || read_snapshot(config),
+        },
     )
 }
 
-fn finish_query_with(
+fn finish_query_with<WriteCache, ReadCache>(
     config: &Config,
     limit: usize,
     generated_at: DateTime<Utc>,
-    live: Result<Vec<pidjezdy_core::departure::Departure>, LiveDepartureError>,
-    write_cache: impl FnOnce(&[pidjezdy_core::departure::Departure]) -> Result<(), CacheWriteError>,
-    read_cache: impl FnOnce() -> Result<CacheSnapshot, CacheReadError>,
-) -> Result<DepartureQuery, DepartureQueryError> {
-    let (departures, data_updated_at, stale, cache_warning) = match live {
+    sources: QuerySources<WriteCache, ReadCache>,
+) -> Result<DepartureQuery, DepartureQueryError>
+where
+    WriteCache: FnOnce(&[Departure]) -> Result<(), CacheWriteError>,
+    ReadCache: FnOnce() -> Result<CacheSnapshot, CacheReadError>,
+{
+    let (departures, data_updated_at, stale, cache_warning) = match sources.live {
         Ok(departures) => {
-            let warning = write_cache(&departures).err();
+            let warning = (sources.write_cache)(&departures).err();
             (departures, generated_at, false, warning)
         }
         Err(live) => {
-            let cached =
-                read_cache().map_err(|cache| DepartureQueryError::Unavailable { live, cache })?;
+            let cached = (sources.read_cache)()
+                .map_err(|cache| DepartureQueryError::Unavailable { live, cache })?;
             (cached.departures, cached.fetched_at, true, None)
         }
     };
@@ -222,13 +226,17 @@ mod tests {
             &configured,
             3,
             now(),
-            Err(live_error()),
-            |_| unreachable!("a failed live request must not update the cache"),
-            || {
-                Ok(CacheSnapshot {
-                    fetched_at: cached_at,
-                    departures: vec![departure()],
-                })
+            QuerySources {
+                live: Err(live_error()),
+                write_cache: |_: &[Departure]| {
+                    unreachable!("a failed live request must not update the cache")
+                },
+                read_cache: || {
+                    Ok(CacheSnapshot {
+                        fetched_at: cached_at,
+                        departures: vec![departure()],
+                    })
+                },
             },
         )
         .unwrap();
@@ -247,9 +255,11 @@ mod tests {
             &configured,
             3,
             now(),
-            Ok(vec![departure()]),
-            |_| Err(CacheWriteError::DirectoryUnavailable),
-            || unreachable!("a successful live request must not read the cache"),
+            QuerySources {
+                live: Ok(vec![departure()]),
+                write_cache: |_: &[Departure]| Err(CacheWriteError::DirectoryUnavailable),
+                read_cache: || unreachable!("a successful live request must not read the cache"),
+            },
         )
         .unwrap();
 
@@ -267,9 +277,13 @@ mod tests {
             &fallback_config(),
             3,
             now(),
-            Err(live_error()),
-            |_| unreachable!("a failed live request must not update the cache"),
-            || Err(CacheReadError::ConfigMismatch),
+            QuerySources {
+                live: Err(live_error()),
+                write_cache: |_: &[Departure]| {
+                    unreachable!("a failed live request must not update the cache")
+                },
+                read_cache: || Err(CacheReadError::ConfigMismatch),
+            },
         )
         .unwrap_err();
 
@@ -289,12 +303,16 @@ mod tests {
             &fallback_config(),
             3,
             now(),
-            Err(live_error()),
-            |_| unreachable!("a failed live request must not update the cache"),
-            || {
-                Err(CacheReadError::NotFound {
-                    path: missing.clone(),
-                })
+            QuerySources {
+                live: Err(live_error()),
+                write_cache: |_: &[Departure]| {
+                    unreachable!("a failed live request must not update the cache")
+                },
+                read_cache: || {
+                    Err(CacheReadError::NotFound {
+                        path: missing.clone(),
+                    })
+                },
             },
         )
         .unwrap_err();

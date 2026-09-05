@@ -7,6 +7,8 @@ use serde::Serialize;
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 
+use crate::departures::DepartureQuery;
+
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub(crate) enum OutputFormat {
     #[default]
@@ -38,29 +40,26 @@ struct JsonOutput<'a> {
 pub(crate) fn write_departures(
     output: &mut impl Write,
     format: OutputFormat,
-    generated_at: DateTime<Utc>,
-    data_updated_at: DateTime<Utc>,
-    stale: bool,
-    departures: &[SelectedDeparture],
+    query: &DepartureQuery,
     styled_text: bool,
 ) -> Result<(), OutputError> {
     match format {
         OutputFormat::Text => {
             write_text(
                 output,
-                generated_at,
-                data_updated_at,
-                stale,
-                departures,
+                query.generated_at,
+                query.data_updated_at,
+                query.stale,
+                &query.departures,
                 styled_text,
             )?;
         }
         OutputFormat::Json => {
             let document = serde_json::to_string(&JsonOutput {
-                generated_at,
-                data_updated_at,
-                stale,
-                departures,
+                generated_at: query.generated_at,
+                data_updated_at: query.data_updated_at,
+                stale: query.stale,
+                departures: &query.departures,
             })?;
             writeln!(output, "{document}")?;
         }
@@ -227,19 +226,25 @@ mod tests {
         }
     }
 
+    fn departure_query(
+        departures: Vec<SelectedDeparture>,
+        data_updated_at: DateTime<Utc>,
+        stale: bool,
+    ) -> DepartureQuery {
+        DepartureQuery {
+            generated_at: now(),
+            data_updated_at,
+            stale,
+            departures,
+            cache_warning: None,
+        }
+    }
+
     #[test]
     fn text_output_uses_aligned_two_line_layout() {
         let mut output = Vec::new();
-        write_departures(
-            &mut output,
-            OutputFormat::Text,
-            now(),
-            now(),
-            false,
-            &[selected()],
-            false,
-        )
-        .unwrap();
+        let query = departure_query(vec![selected()], now(), false);
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
@@ -252,19 +257,10 @@ mod tests {
 
     #[test]
     fn text_output_separates_full_width_records() {
-        let departures = [selected(), selected()];
+        let query = departure_query(vec![selected(), selected()], now(), false);
         let mut output = Vec::new();
 
-        write_departures(
-            &mut output,
-            OutputFormat::Text,
-            now(),
-            now(),
-            false,
-            &departures,
-            false,
-        )
-        .unwrap();
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
 
         let output = String::from_utf8(output).unwrap();
         let lines = output.lines().collect::<Vec<_>>();
@@ -282,17 +278,9 @@ mod tests {
     #[test]
     fn styled_text_emphasizes_primary_and_dims_secondary_content() {
         let mut output = Vec::new();
+        let query = departure_query(vec![selected()], now(), false);
 
-        write_departures(
-            &mut output,
-            OutputFormat::Text,
-            now(),
-            now(),
-            false,
-            &[selected()],
-            true,
-        )
-        .unwrap();
+        write_departures(&mut output, OutputFormat::Text, &query, true).unwrap();
 
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("\x1b[1;36m158\x1b[0m"));
@@ -305,29 +293,13 @@ mod tests {
         let mut departure = selected();
         departure.leave_in_seconds = 59;
         let mut output = Vec::new();
-        write_departures(
-            &mut output,
-            OutputFormat::Text,
-            now(),
-            now(),
-            false,
-            &[departure],
-            false,
-        )
-        .unwrap();
+        let query = departure_query(vec![departure], now(), false);
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
         assert!(String::from_utf8(output).unwrap().contains("leave now"));
 
         let mut empty = Vec::new();
-        write_departures(
-            &mut empty,
-            OutputFormat::Text,
-            now(),
-            now(),
-            false,
-            &[],
-            false,
-        )
-        .unwrap();
+        let query = departure_query(Vec::new(), now(), false);
+        write_departures(&mut empty, OutputFormat::Text, &query, false).unwrap();
         assert_eq!(
             String::from_utf8(empty).unwrap(),
             "No reachable departures.\n"
@@ -337,16 +309,8 @@ mod tests {
     #[test]
     fn json_output_has_a_machine_readable_envelope() {
         let mut output = Vec::new();
-        write_departures(
-            &mut output,
-            OutputFormat::Json,
-            now(),
-            now() - TimeDelta::minutes(3),
-            true,
-            &[selected()],
-            false,
-        )
-        .unwrap();
+        let query = departure_query(vec![selected()], now() - TimeDelta::minutes(3), true);
+        write_departures(&mut output, OutputFormat::Json, &query, false).unwrap();
         let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
 
         assert_eq!(json["generated_at"], "2026-09-04T10:00:00Z");
@@ -359,16 +323,8 @@ mod tests {
     #[test]
     fn text_output_labels_stale_data_with_its_age() {
         let mut output = Vec::new();
-        write_departures(
-            &mut output,
-            OutputFormat::Text,
-            now(),
-            now() - TimeDelta::seconds(190),
-            true,
-            &[selected()],
-            false,
-        )
-        .unwrap();
+        let query = departure_query(vec![selected()], now() - TimeDelta::seconds(190), true);
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
 
         assert!(
             String::from_utf8(output)
