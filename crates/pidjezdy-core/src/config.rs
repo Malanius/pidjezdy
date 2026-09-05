@@ -259,9 +259,66 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_fields() {
-        let error = Config::from_toml(&format!("{VALID}\nmisspelled = true")).unwrap_err();
-        assert!(error.to_string().contains("unknown field"));
+    fn rejects_unknown_fields_at_every_config_layer() {
+        let cases = [
+            (
+                format!("misspelled = true\n{VALID}"),
+                "expected one of `display`, `fetch`, `boarding_points`",
+            ),
+            (
+                format!("[display]\nmisspelled = true\n{VALID}"),
+                "expected `max_departures` or `route_quotas`",
+            ),
+            (
+                format!("[fetch]\nmisspelled = true\n{VALID}"),
+                "expected `minutes_after` or `api_limit`",
+            ),
+            (
+                format!(
+                    r#"
+                        [display]
+                        max_departures = 2
+
+                        [[display.route_quotas]]
+                        line = "158"
+                        headsign = "Centrum"
+                        minimum_departures = 2
+                        misspelled = true
+
+                        {VALID}
+                    "#
+                ),
+                "expected one of `line`, `headsign`, `minimum_departures`",
+            ),
+            (
+                r#"
+                    [[boarding_points]]
+                    name = "Nearby stop"
+                    stop_ids = ["U123Z1P"]
+                    walking_minutes = 4
+                    misspelled = true
+
+                    [[boarding_points.routes]]
+                    line = "158"
+                    headsign = "Centrum"
+                "#
+                .to_owned(),
+                concat!(
+                    "expected one of `name`, `stop_ids`, `walking_minutes`, ",
+                    "`safety_buffer_minutes`, `routes`"
+                ),
+            ),
+            (
+                format!("{VALID}\nmisspelled = true"),
+                "expected `line` or `headsign`",
+            ),
+        ];
+
+        for (input, expected_fields) in cases {
+            let message = Config::from_toml(&input).unwrap_err().to_string();
+            assert!(message.contains("unknown field `misspelled`"), "{message}");
+            assert!(message.contains(expected_fields), "{message}");
+        }
     }
 
     #[test]
