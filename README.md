@@ -128,6 +128,45 @@ The JSON document contains `generated_at`, `data_updated_at`, a `stale` flag,
 and a `departures` array. Relative times are also included as exact seconds so
 consumers do not need to infer them from rounded labels.
 
+## Shell completions
+
+Generate completion scripts for Bash, Elvish, Fish, PowerShell, or Zsh with:
+
+```console
+pidjezdy completions <shell>
+```
+
+Load Bash completions for the current session with:
+
+```bash
+source <(pidjezdy completions bash)
+```
+
+For persistent completion, write the generated script to the location your
+shell scans. Common user-local locations are:
+
+```bash
+# Bash (with bash-completion installed)
+mkdir -p ~/.local/share/bash-completion/completions
+pidjezdy completions bash > ~/.local/share/bash-completion/completions/pidjezdy
+
+# Fish
+mkdir -p ~/.config/fish/completions
+pidjezdy completions fish > ~/.config/fish/completions/pidjezdy.fish
+
+# Zsh; add this directory to fpath before running compinit
+mkdir -p ~/.local/share/zsh/site-functions
+pidjezdy completions zsh > ~/.local/share/zsh/site-functions/_pidjezdy
+```
+
+PowerShell can load completions for the current session with:
+
+```powershell
+pidjezdy completions powershell | Out-String | Invoke-Expression
+```
+
+Add that command to `$PROFILE` to load it in future PowerShell sessions.
+
 ## Cache and stale data
 
 After every successful PID request, `pidjezdy` atomically replaces a snapshot
