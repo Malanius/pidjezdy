@@ -212,6 +212,7 @@ fn read_at_most(reader: impl Read, limit: u64) -> Result<Option<Vec<u8>>, std::i
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
     use std::process::Command;
 
     use chrono::TimeDelta;
