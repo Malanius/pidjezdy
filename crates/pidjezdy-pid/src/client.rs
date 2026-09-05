@@ -150,20 +150,20 @@ fn read_at_most(reader: impl Read, limit: u64) -> Result<Option<Vec<u8>>, std::i
 
 #[derive(Debug, Error)]
 pub enum PidClientError {
-    #[error("invalid PID endpoint: {0}")]
-    InvalidEndpoint(url::ParseError),
-    #[error("could not build HTTP client: {0}")]
-    BuildClient(reqwest::Error),
-    #[error("PID request failed: {0}")]
+    #[error("invalid PID endpoint")]
+    InvalidEndpoint(#[source] url::ParseError),
+    #[error("could not build HTTP client")]
+    BuildClient(#[source] reqwest::Error),
+    #[error("PID request failed")]
     Send(#[source] reqwest::Error),
-    #[error("could not read PID response: {0}")]
-    ReadBody(std::io::Error),
+    #[error("could not read PID response")]
+    ReadBody(#[source] std::io::Error),
     #[error("PID response exceeded the {limit}-byte body limit")]
     ResponseTooLarge { limit: u64 },
     #[error("PID returned HTTP {status}: {body}")]
     HttpStatus { status: u16, body: String },
-    #[error("could not decompress PID response: {0}")]
-    Decompress(std::io::Error),
+    #[error("could not decompress PID response")]
+    Decompress(#[source] std::io::Error),
     #[error(transparent)]
     Response(PidResponseError),
 }

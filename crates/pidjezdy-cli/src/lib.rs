@@ -7,15 +7,16 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
-use pidjezdy_pid::{PidClientError, PidRequestError};
 use thiserror::Error;
 
 mod cache;
 mod departures;
 mod output;
 
-use departures::{DepartureQueryError, query_departures};
-use output::{OutputError, OutputFormat, write_departures};
+pub use departures::DepartureQueryError;
+use departures::query_departures;
+pub use output::OutputError;
+use output::{OutputFormat, write_departures};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
 const CONFIG_FILE: &str = "config.toml";
@@ -106,68 +107,36 @@ pub enum AppError {
     ConfigDirectoryUnavailable,
     #[error("configuration already exists at {0}")]
     ConfigAlreadyExists(PathBuf),
-    #[error("could not create configuration directory {path}: {source}")]
+    #[error("could not create configuration directory {path}")]
     CreateConfigDirectory {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
-    #[error("could not create configuration {path}: {source}")]
+    #[error("could not create configuration {path}")]
     CreateConfig {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
-    #[error("could not read configuration {path}: {source}")]
+    #[error("could not read configuration {path}")]
     ReadConfig {
         path: PathBuf,
+        #[source]
         source: std::io::Error,
     },
-    #[error("invalid configuration {path}: {source}")]
-    InvalidConfig { path: PathBuf, source: ConfigError },
-    #[error("could not build PID departure request: {0}")]
-    DepartureRequest(#[source] PidRequestError),
-    #[error("could not create PID client: {source}; cached fallback unavailable: {cache}")]
-    CreatePidClient {
-        source: PidClientError,
-        cache: String,
+    #[error("invalid configuration {path}")]
+    InvalidConfig {
+        path: PathBuf,
+        #[source]
+        source: ConfigError,
     },
-    #[error("could not fetch PID departures: {source}; cached fallback unavailable: {cache}")]
-    FetchDepartures {
-        source: PidClientError,
-        cache: String,
-    },
-    #[error("could not serialize JSON output: {0}")]
-    SerializeOutput(#[source] serde_json::Error),
-    #[error("could not write command output: {0}")]
-    WriteOutput(#[source] std::io::Error),
-    #[error("could not write command diagnostics: {0}")]
+    #[error(transparent)]
+    Departures(#[from] DepartureQueryError),
+    #[error(transparent)]
+    Output(#[from] OutputError),
+    #[error("could not write command diagnostics")]
     WriteDiagnostics(#[source] std::io::Error),
-}
-
-impl From<DepartureQueryError> for AppError {
-    fn from(error: DepartureQueryError) -> Self {
-        match error {
-            DepartureQueryError::Request(source) => Self::DepartureRequest(source),
-            DepartureQueryError::Unavailable { live, cache } => match live {
-                departures::LiveDepartureError::CreateClient(source) => Self::CreatePidClient {
-                    source,
-                    cache: cache.to_string(),
-                },
-                departures::LiveDepartureError::Fetch(source) => Self::FetchDepartures {
-                    source,
-                    cache: cache.to_string(),
-                },
-            },
-        }
-    }
-}
-
-impl From<OutputError> for AppError {
-    fn from(error: OutputError) -> Self {
-        match error {
-            OutputError::Json(source) => Self::SerializeOutput(source),
-            OutputError::Write(source) => Self::WriteOutput(source),
-        }
-    }
 }
 
 /// Run the command using process arguments and environment.
@@ -237,13 +206,15 @@ fn run(
             let path = resolve_config_path(cli.config.as_deref(), env_path)?;
             match command {
                 ConfigCommand::Path => {
-                    writeln!(output, "{}", path.display()).map_err(AppError::WriteOutput)
+                    writeln!(output, "{}", path.display()).map_err(OutputError::from)?;
+                    Ok(())
                 }
                 ConfigCommand::Init => init_config(&path, output),
                 ConfigCommand::Check => {
                     load_config(&path)?;
                     writeln!(output, "configuration is valid: {}", path.display())
-                        .map_err(AppError::WriteOutput)
+                        .map_err(OutputError::from)?;
+                    Ok(())
                 }
             }
         }
@@ -251,7 +222,8 @@ fn run(
             let mut command = Cli::command();
             let mut script = Vec::new();
             generate(shell, &mut command, "pidjezdy", &mut script);
-            output.write_all(&script).map_err(AppError::WriteOutput)
+            output.write_all(&script).map_err(OutputError::from)?;
+            Ok(())
         }
     }
 }
@@ -279,7 +251,8 @@ fn init_config(path: &Path, output: &mut impl Write) -> Result<(), AppError> {
             path: path.to_owned(),
             source,
         })?;
-    writeln!(output, "created {}", path.display()).map_err(AppError::WriteOutput)
+    writeln!(output, "created {}", path.display()).map_err(OutputError::from)?;
+    Ok(())
 }
 
 fn load_config(path: &Path) -> Result<Config, AppError> {
@@ -417,7 +390,14 @@ mod tests {
 
     #[test]
     fn output_errors_preserve_the_io_error_source() {
-        let error = AppError::WriteOutput(std::io::Error::other("closed output"));
-        assert!(std::error::Error::source(&error).is_some());
+        let error = AppError::from(OutputError::Write(std::io::Error::other("closed output")));
+        let chain = std::iter::successors(
+            Some(&error as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+        assert_eq!(chain, ["could not write command output", "closed output"]);
     }
 }
