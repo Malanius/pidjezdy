@@ -68,9 +68,9 @@ pub(crate) fn query_departures(
         QuerySources {
             live,
             write_cache: |departures: &[Departure]| {
-                write_snapshot(config, generated_at, departures)
+                write_snapshot(&request, generated_at, departures)
             },
-            read_cache: || read_snapshot(config),
+            read_cache: || read_snapshot(&request),
         },
     )
 }
@@ -229,6 +229,22 @@ mod tests {
     }
 
     #[test]
+    fn presentation_changes_do_not_change_the_cache_request() {
+        let original = fallback_config();
+        let mut changed = original.clone();
+        changed.display.max_departures = 7;
+        changed.boarding_points[0].name = "Renamed stop".into();
+        changed.boarding_points[0].walking_minutes = 9;
+        changed.boarding_points[0].safety_buffer_minutes = 4;
+        changed.boarding_points[0].routes[0].headsign = "Different direction".into();
+
+        assert_eq!(
+            configured_request(&original).unwrap(),
+            configured_request(&changed).unwrap()
+        );
+    }
+
+    #[test]
     fn reselects_cached_departures_at_the_current_time_and_marks_them_stale() {
         let configured = fallback_config();
         let cached_at = now() - TimeDelta::minutes(3);
@@ -314,7 +330,7 @@ mod tests {
                 write_cache: |_: &[Departure]| {
                     unreachable!("a failed live request must not update the cache")
                 },
-                read_cache: || Err(CacheReadError::ConfigMismatch),
+                read_cache: || Err(CacheReadError::RequestMismatch),
             },
         )
         .unwrap_err();
@@ -322,7 +338,7 @@ mod tests {
         assert!(matches!(
             error,
             DepartureQueryError::Unavailable(DepartureUnavailable {
-                cache: CacheReadError::ConfigMismatch,
+                cache: CacheReadError::RequestMismatch,
                 ..
             })
         ));
