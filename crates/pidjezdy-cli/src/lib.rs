@@ -236,6 +236,7 @@ pub fn resolve_config_path(
 
 fn resolve_endpoint(environment: Option<&str>) -> &str {
     environment
+        .map(str::trim)
         .filter(|endpoint| !endpoint.is_empty())
         .unwrap_or(DEFAULT_ENDPOINT)
 }
@@ -562,11 +563,12 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_environment_uses_nonempty_overrides() {
+    fn endpoint_environment_uses_trimmed_nonempty_overrides() {
         assert_eq!(resolve_endpoint(None), DEFAULT_ENDPOINT);
         assert_eq!(resolve_endpoint(Some("")), DEFAULT_ENDPOINT);
+        assert_eq!(resolve_endpoint(Some(" \t\n")), DEFAULT_ENDPOINT);
         assert_eq!(
-            resolve_endpoint(Some("http://127.0.0.1:1234/departures")),
+            resolve_endpoint(Some("  http://127.0.0.1:1234/departures\t")),
             "http://127.0.0.1:1234/departures"
         );
     }
