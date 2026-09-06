@@ -1,15 +1,17 @@
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::io::{ErrorKind, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use chrono::{TimeDelta, Utc};
 use serde_json::json;
 
 const DEPARTURES: &[u8] = include_bytes!("../../pidjezdy-pid/fixtures/departures.json");
 const ERROR: &[u8] = include_bytes!("../../pidjezdy-pid/fixtures/error.json");
+const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct FixtureServer {
     endpoint: String,
@@ -26,7 +28,9 @@ fn serve_once(body: Vec<u8>) -> FixtureServer {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let worker = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let mut stream = accept_before_timeout(&listener);
+        stream.set_read_timeout(Some(SERVER_TIMEOUT)).unwrap();
+        stream.set_write_timeout(Some(SERVER_TIMEOUT)).unwrap();
         let mut request = Vec::new();
         while !request.windows(4).any(|window| window == b"\r\n\r\n") {
             let mut chunk = [0_u8; 1024];
@@ -56,6 +60,24 @@ fn serve_once(body: Vec<u8>) -> FixtureServer {
     FixtureServer {
         endpoint: format!("http://{address}/departures"),
         worker,
+    }
+}
+
+fn accept_before_timeout(listener: &TcpListener) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + SERVER_TIMEOUT;
+
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(error) if error.kind() == ErrorKind::WouldBlock && Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                panic!("CLI did not connect to fixture server within {SERVER_TIMEOUT:?}");
+            }
+            Err(error) => panic!("fixture server failed to accept connection: {error}"),
+        }
     }
 }
 
