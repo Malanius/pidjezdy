@@ -99,7 +99,7 @@ pub(crate) fn read_snapshot(
     read_snapshot_from(&path, request)
 }
 
-fn default_cache_path() -> Option<PathBuf> {
+pub(crate) fn default_cache_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE))
 }
 

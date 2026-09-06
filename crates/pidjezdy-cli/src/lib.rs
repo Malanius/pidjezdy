@@ -77,6 +77,11 @@ enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Inspect and manage cached departures.
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommand,
+    },
     /// Generate a completion script for a supported shell.
     Completions {
         /// Shell whose completion script should be generated.
@@ -102,6 +107,14 @@ enum ConfigCommand {
     Init,
     /// Parse and validate the active configuration.
     Check,
+}
+
+#[derive(Debug, Subcommand)]
+enum CacheCommand {
+    /// Print the resolved departure cache path.
+    Path,
+    /// Remove the departure cache if it exists.
+    Clear,
 }
 
 #[derive(Debug, Error)]
@@ -134,6 +147,14 @@ pub enum AppError {
         #[source]
         source: ConfigError,
     },
+    #[error("could not determine the platform cache directory")]
+    CacheDirectoryUnavailable,
+    #[error("could not remove departure cache {path}")]
+    RemoveCache {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error(transparent)]
     Departures(#[from] DepartureQueryError),
     #[error(transparent)]
@@ -151,6 +172,8 @@ impl AppError {
             Self::CreateConfig { .. } => "config_create_failed",
             Self::ReadConfig { .. } => "config_unreadable",
             Self::InvalidConfig { .. } => "config_invalid",
+            Self::CacheDirectoryUnavailable => "cache_directory_unavailable",
+            Self::RemoveCache { .. } => "cache_remove_failed",
             Self::Departures(DepartureQueryError::Request(_)) => "request_invalid",
             Self::Departures(DepartureQueryError::Unavailable(_)) => "departures_unavailable",
             Self::Output(_) => "output_failed",
@@ -325,6 +348,16 @@ fn run_command(
                 }
             }
         }
+        Command::Cache { command } => {
+            let path = cache::default_cache_path().ok_or(AppError::CacheDirectoryUnavailable)?;
+            match command {
+                CacheCommand::Path => {
+                    writeln!(output, "{}", path.display()).map_err(OutputError::from)?;
+                    Ok(())
+                }
+                CacheCommand::Clear => clear_cache(&path, output),
+            }
+        }
         Command::Completions { shell } => {
             let mut command = Cli::command();
             let mut script = Vec::new();
@@ -333,6 +366,22 @@ fn run_command(
             Ok(())
         }
     }
+}
+
+fn clear_cache(path: &Path, output: &mut impl Write) -> Result<(), AppError> {
+    match fs::remove_file(path) {
+        Ok(()) => writeln!(output, "removed {}", path.display()).map_err(OutputError::from)?,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            writeln!(output, "no cache file at {}", path.display()).map_err(OutputError::from)?;
+        }
+        Err(source) => {
+            return Err(AppError::RemoveCache {
+                path: path.to_owned(),
+                source,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn init_config(path: &Path, output: &mut impl Write) -> Result<(), AppError> {

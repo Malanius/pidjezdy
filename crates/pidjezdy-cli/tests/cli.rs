@@ -422,6 +422,75 @@ fn invalid_configuration_lists_validation_errors() {
 }
 
 #[test]
+fn cache_path_does_not_require_valid_configuration() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("invalid.toml");
+    fs::write(&config, "not = [valid").unwrap();
+    let output = isolated_command(directory.path())
+        .arg("--config")
+        .arg(config)
+        .args(["cache", "path"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "{}\n",
+            directory
+                .path()
+                .join("cache/pidjezdy/departures.json")
+                .display()
+        )
+    );
+}
+
+#[test]
+fn cache_clear_removes_a_snapshot_and_accepts_an_absent_cache() {
+    let directory = tempfile::tempdir().unwrap();
+    let cache = directory.path().join("cache/pidjezdy/departures.json");
+    fs::create_dir_all(cache.parent().unwrap()).unwrap();
+    fs::write(&cache, "cached departures").unwrap();
+
+    let removed = isolated_command(directory.path())
+        .args(["cache", "clear"])
+        .output()
+        .unwrap();
+    assert!(
+        removed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&removed.stderr)
+    );
+    assert!(removed.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(removed.stdout).unwrap(),
+        format!("removed {}\n", cache.display())
+    );
+    assert!(!cache.exists());
+
+    let absent = isolated_command(directory.path())
+        .args(["cache", "clear"])
+        .output()
+        .unwrap();
+    assert!(
+        absent.status.success(),
+        "{}",
+        String::from_utf8_lossy(&absent.stderr)
+    );
+    assert!(absent.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(absent.stdout).unwrap(),
+        format!("no cache file at {}\n", cache.display())
+    );
+}
+
+#[test]
 fn explicit_config_beats_environment_config() {
     let directory = tempfile::tempdir().unwrap();
     let config = write_config(directory.path());

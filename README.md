@@ -229,6 +229,22 @@ time, and the PID request that produced them: the time window, API limit, and
 grouped stop IDs. A cache-write failure does not hide fresh results; it is
 reported as a warning on stderr.
 
+Print the platform-resolved cache path with:
+
+```console
+pidjezdy cache path
+```
+
+Remove the current snapshot with:
+
+```console
+pidjezdy cache clear
+```
+
+Both commands work without loading the configuration, which makes them useful
+when diagnosing a missing or invalid config. Clearing an already-absent cache
+succeeds and reports that no cache file was present.
+
 A successful empty response is still rendered as fresh data, but it does not
 replace an existing non-empty snapshot. This protects the fallback from brief
 empty responses during provider degradation. If a later request fails, cached
