@@ -172,10 +172,10 @@ need to infer them from rounded labels. When the command fails after accepting
 
 `error.kind` is a stable machine-readable value. Departure queries can report
 `config_directory_unavailable`, `config_unreadable`, `config_invalid`,
-`request_invalid`, `departures_unavailable`, or `diagnostics_write_failed`.
-The human-readable `message` and `causes` may become more detailed over time
-and should not be parsed for control flow. Errors that prevent writing stdout
-itself cannot produce a JSON document.
+`request_invalid`, `departures_unavailable`, `diagnostics_write_failed`, or
+`output_failed`. The human-readable `message` and `causes` may become more
+detailed over time and should not be parsed for control flow. Errors that
+prevent writing stdout itself cannot produce a JSON document.
 
 Consumers must require the supported `schema_version`. The version is bumped
 when a field is removed, renamed, retyped, or changes meaning without changing
