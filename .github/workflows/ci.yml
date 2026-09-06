@@ -21,6 +21,22 @@ jobs:
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Check plugin and CLI versions match
+        run: |
+          node -e '
+            const fs = require("fs");
+            const childProcess = require("child_process");
+            const metadata = JSON.parse(childProcess.execFileSync(
+              "cargo", ["metadata", "--no-deps", "--format-version", "1"],
+              { encoding: "utf8" }
+            ));
+            const cli = metadata.packages.find(pkg => pkg.name === "pidjezdy");
+            const plugin = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            if (!cli || plugin.version !== cli.version) {
+              console.error(`plugin version ${plugin.version} does not match CLI version ${cli && cli.version}`);
+              process.exit(1);
+            }
+          '
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
