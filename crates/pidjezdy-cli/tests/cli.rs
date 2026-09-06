@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::panic::{AssertUnwindSafe, resume_unwind};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::thread::{self, JoinHandle};
@@ -20,7 +21,9 @@ struct FixtureServer {
 
 impl FixtureServer {
     fn finish(self) {
-        self.worker.join().unwrap();
+        if let Err(payload) = self.worker.join() {
+            resume_unwind(payload);
+        }
     }
 }
 
@@ -153,6 +156,20 @@ fn disconnect_once() -> FixtureServer {
         endpoint: format!("http://{address}/departures"),
         worker,
     }
+}
+
+#[test]
+fn fixture_server_finish_preserves_worker_panic() {
+    let server = FixtureServer {
+        endpoint: String::new(),
+        worker: thread::spawn(|| panic!("fixture worker failed")),
+    };
+
+    let payload = std::panic::catch_unwind(AssertUnwindSafe(|| server.finish())).unwrap_err();
+    assert_eq!(
+        payload.downcast_ref::<&str>(),
+        Some(&"fixture worker failed")
+    );
 }
 
 #[test]
