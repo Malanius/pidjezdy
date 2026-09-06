@@ -232,7 +232,7 @@ mod tests {
     }
 
     fn request() -> DepartureBoardRequest {
-        DepartureBoardRequest::new(120, 20, vec![vec!["U100Z1P".into()]]).unwrap()
+        DepartureBoardRequest::new(120, 20, vec![vec!["U100Z1P".into(), "U100Z2P".into()]]).unwrap()
     }
 
     fn departure(trip_id: &str) -> Departure {
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_only_matching_supported_snapshots() {
+    fn reads_matching_snapshots_and_rejects_unsupported_versions() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("departures.json");
         let configured = request();
@@ -287,13 +287,6 @@ mod tests {
         assert_eq!(cached.fetched_at, now());
         assert_eq!(cached.departures[0].trip_id, "cached");
 
-        let other_request =
-            DepartureBoardRequest::new(90, 20, vec![vec!["U100Z1P".into()]]).unwrap();
-        assert!(matches!(
-            read_snapshot_from(&path, &other_request),
-            Err(CacheReadError::RequestMismatch)
-        ));
-
         let mut document: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         document["version"] = 3.into();
@@ -302,6 +295,40 @@ mod tests {
             read_snapshot_from(&path, &configured),
             Err(CacheReadError::UnsupportedVersion(3))
         ));
+    }
+
+    #[test]
+    fn rejects_changes_to_any_request_key_dimension() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("departures.json");
+        write_snapshot_to(&path, &request(), now(), &[departure("cached")]).unwrap();
+
+        let equivalent =
+            DepartureBoardRequest::new(120, 20, vec![vec![" U100Z1P ".into(), "U100Z2P ".into()]])
+                .unwrap();
+        assert!(read_snapshot_from(&path, &equivalent).is_ok());
+
+        let mismatches = [
+            DepartureBoardRequest::new(90, 20, vec![vec!["U100Z1P".into(), "U100Z2P".into()]])
+                .unwrap(),
+            DepartureBoardRequest::new(120, 19, vec![vec!["U100Z1P".into(), "U100Z2P".into()]])
+                .unwrap(),
+            DepartureBoardRequest::new(120, 20, vec![vec!["U100Z1P".into(), "U100Z3P".into()]])
+                .unwrap(),
+            DepartureBoardRequest::new(
+                120,
+                20,
+                vec![vec!["U100Z1P".into()], vec!["U100Z2P".into()]],
+            )
+            .unwrap(),
+        ];
+
+        for mismatch in mismatches {
+            assert!(matches!(
+                read_snapshot_from(&path, &mismatch),
+                Err(CacheReadError::RequestMismatch)
+            ));
+        }
     }
 
     #[test]
