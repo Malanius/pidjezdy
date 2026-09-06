@@ -186,8 +186,8 @@ fn normalize_text(value: String) -> String {
 mod tests {
     use super::*;
 
-    const DEPARTURES: &[u8] = include_bytes!("../tests/fixtures/departures.json");
-    const ERROR: &[u8] = include_bytes!("../tests/fixtures/error.json");
+    const DEPARTURES: &[u8] = include_bytes!("../fixtures/departures.json");
+    const ERROR: &[u8] = include_bytes!("../fixtures/error.json");
 
     #[test]
     fn parses_flattens_and_normalizes_departures() {
