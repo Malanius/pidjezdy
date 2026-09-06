@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::io::Write;
 
 use chrono::{DateTime, Utc};
@@ -7,7 +8,10 @@ use serde::Serialize;
 use thiserror::Error;
 use unicode_width::UnicodeWidthStr;
 
+use crate::AppError;
 use crate::departures::DepartureQuery;
+
+pub(crate) const JSON_SCHEMA_VERSION: u32 = 1;
 
 const LINE_STYLE: &str = "\x1b[1;36m";
 const EMPHASIS_STYLE: &str = "\x1b[1m";
@@ -31,10 +35,25 @@ pub enum OutputError {
 
 #[derive(Serialize)]
 struct JsonOutput<'a> {
+    schema_version: u32,
     generated_at: DateTime<Utc>,
     data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &'a [SelectedDeparture],
+}
+
+#[derive(Serialize)]
+struct JsonErrorOutput {
+    schema_version: u32,
+    generated_at: DateTime<Utc>,
+    error: JsonError,
+}
+
+#[derive(Serialize)]
+struct JsonError {
+    kind: &'static str,
+    message: String,
+    causes: Vec<String>,
 }
 
 /// Write selected departures in the requested presentation format.
@@ -61,6 +80,7 @@ pub(crate) fn write_departures(
         }
         OutputFormat::Json => {
             let document = serde_json::to_string(&JsonOutput {
+                schema_version: JSON_SCHEMA_VERSION,
                 generated_at: query.generated_at,
                 data_updated_at: query.data_updated_at,
                 stale: query.stale,
@@ -70,6 +90,39 @@ pub(crate) fn write_departures(
         }
     }
     Ok(())
+}
+
+pub(crate) fn write_json_error(
+    output: &mut impl Write,
+    generated_at: DateTime<Utc>,
+    error: &AppError,
+) -> Result<(), OutputError> {
+    let document = serde_json::to_string(&JsonErrorOutput {
+        schema_version: JSON_SCHEMA_VERSION,
+        generated_at,
+        error: JsonError {
+            kind: error.json_kind(),
+            message: error.to_string(),
+            causes: distinct_causes(error),
+        },
+    })?;
+    writeln!(output, "{document}")?;
+    Ok(())
+}
+
+fn distinct_causes(error: &(dyn Error + 'static)) -> Vec<String> {
+    let mut causes = Vec::new();
+    let mut previous = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let message = cause.to_string();
+        if !previous.ends_with(&message) {
+            causes.push(message.clone());
+        }
+        previous = message;
+        source = cause.source();
+    }
+    causes
 }
 
 fn write_text(
@@ -363,6 +416,7 @@ mod tests {
         write_departures(&mut output, OutputFormat::Json, &query, false).unwrap();
         let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
 
+        assert_eq!(json["schema_version"], JSON_SCHEMA_VERSION);
         assert_eq!(json["generated_at"], "2026-09-04T10:00:00Z");
         assert_eq!(json["data_updated_at"], "2026-09-04T09:57:00Z");
         assert_eq!(json["stale"], true);
