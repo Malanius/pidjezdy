@@ -333,6 +333,12 @@ node --test tests/model.test.js
 omarchy plugin validate .
 ```
 
+`PIDJEZDY_ENDPOINT` is a testing aid that redirects departure requests to a
+different HTTP endpoint. An unset or empty value uses the built-in PID
+endpoint. It is intentionally not a normal user setting; the end-to-end suite
+uses it with loopback fixture servers and isolated temporary configuration and
+cache directories, so tests never contact PID or touch user data.
+
 For local plugin development, link the checkout into the user plugin
 directory. Omarchy hot-reloads changes:
 
