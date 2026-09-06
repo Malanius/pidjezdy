@@ -23,10 +23,21 @@ fn write_error_report(
     while let Some(cause) = source {
         let message = cause.to_string();
         if !previous.ends_with(&message) {
-            writeln!(output, "  caused by: {message}")?;
+            write_cause(output, &message)?;
         }
         previous = message;
         source = cause.source();
+    }
+    Ok(())
+}
+
+fn write_cause(output: &mut impl Write, message: &str) -> Result<(), std::io::Error> {
+    let mut lines = message.lines();
+    if let Some(first) = lines.next() {
+        writeln!(output, "  caused by: {first}")?;
+        for line in lines {
+            writeln!(output, "             {line}")?;
+        }
     }
     Ok(())
 }
@@ -67,5 +78,32 @@ mod tests {
         assert!(output.starts_with("pidjezdy: invalid configuration config.toml\n"));
         assert!(output.contains("  caused by: invalid TOML:"));
         assert_eq!(output.matches("TOML parse error").count(), 1);
+    }
+
+    #[test]
+    fn indents_every_line_of_a_multiline_cause() {
+        let source = pidjezdy_core::config::Config::from_toml(
+            r"
+                [display]
+                max_departures = 0
+            ",
+        )
+        .unwrap_err();
+        let error = AppError::InvalidConfig {
+            path: PathBuf::from("config.toml"),
+            source,
+        };
+        let mut output = Vec::new();
+
+        write_error_report(&mut output, &error).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("  caused by: configuration is invalid:\n"));
+        assert!(
+            output
+                .lines()
+                .skip(2)
+                .all(|line| line.starts_with("             - "))
+        );
     }
 }
