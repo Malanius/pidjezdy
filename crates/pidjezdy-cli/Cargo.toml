@@ -16,7 +16,7 @@ pidjezdy-core = { path = "../pidjezdy-core" }
 pidjezdy-pid = { path = "../pidjezdy-pid" }
 serde.workspace = true
 serde_json.workspace = true
-tempfile = "3.23.0"
+tempfile.workspace = true
 thiserror.workspace = true
 unicode-width.workspace = true
 
