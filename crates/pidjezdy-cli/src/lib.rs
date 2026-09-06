@@ -13,8 +13,8 @@ mod cache;
 mod departures;
 mod output;
 
-pub use departures::DepartureQueryError;
 use departures::query_departures;
+pub use departures::{DepartureQueryError, DepartureUnavailable};
 pub use output::OutputError;
 use output::{OutputFormat, write_departures};
 
