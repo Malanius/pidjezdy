@@ -24,21 +24,26 @@ struct QuerySources<WriteCache, ReadCache> {
 
 #[derive(Debug, Error)]
 pub(super) enum LiveDepartureError {
-    #[error("could not create PID client: {0}")]
+    #[error("could not create PID client")]
     CreateClient(#[source] PidClientError),
-    #[error("could not fetch PID departures: {0}")]
+    #[error("could not fetch PID departures")]
     Fetch(#[source] PidClientError),
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum DepartureQueryError {
-    #[error("could not build PID departure request: {0}")]
+pub enum DepartureQueryError {
+    #[error("could not build PID departure request")]
     Request(#[from] PidRequestError),
-    #[error("{live}; cached fallback unavailable: {cache}")]
-    Unavailable {
-        live: LiveDepartureError,
-        cache: CacheReadError,
-    },
+    #[error("departures unavailable")]
+    Unavailable(#[source] DepartureUnavailable),
+}
+
+#[derive(Debug, Error)]
+#[error("cached fallback unavailable: {cache}")]
+pub struct DepartureUnavailable {
+    #[source]
+    live: LiveDepartureError,
+    cache: CacheReadError,
 }
 
 /// Fetch, filter, rank, and limit departures using validated configuration.
@@ -86,8 +91,9 @@ where
             (departures, generated_at, false, warning)
         }
         Err(live) => {
-            let cached = (sources.read_cache)()
-                .map_err(|cache| DepartureQueryError::Unavailable { live, cache })?;
+            let cached = (sources.read_cache)().map_err(|cache| {
+                DepartureQueryError::Unavailable(DepartureUnavailable { live, cache })
+            })?;
             (cached.departures, cached.fetched_at, true, None)
         }
     };
@@ -289,10 +295,10 @@ mod tests {
 
         assert!(matches!(
             error,
-            DepartureQueryError::Unavailable {
+            DepartureQueryError::Unavailable(DepartureUnavailable {
                 cache: CacheReadError::ConfigMismatch,
                 ..
-            }
+            })
         ));
     }
 
@@ -317,11 +323,20 @@ mod tests {
         )
         .unwrap_err();
 
+        let chain = std::iter::successors(
+            Some(&error as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+        assert_eq!(chain[0], "departures unavailable");
         assert!(
-            error
-                .to_string()
-                .contains("cached fallback unavailable: no cached departures available yet")
+            chain[1].contains("cached fallback unavailable: no cached departures available yet")
         );
-        assert!(!error.to_string().contains("os error"));
+        assert_eq!(chain[2], "could not create PID client");
+        assert_eq!(chain[3], "invalid PID endpoint");
+        assert!(chain.len() > 4);
+        assert!(!chain.join("\n").contains("os error"));
     }
 }

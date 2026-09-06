@@ -22,10 +22,10 @@ pub(crate) enum OutputFormat {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum OutputError {
-    #[error("could not serialize JSON output: {0}")]
+pub enum OutputError {
+    #[error("could not serialize JSON output")]
     Json(#[from] serde_json::Error),
-    #[error("could not write command output: {0}")]
+    #[error("could not write command output")]
     Write(#[from] std::io::Error),
 }
 
