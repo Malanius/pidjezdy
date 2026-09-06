@@ -7,7 +7,7 @@ use url::Url;
 #[serde(deny_unknown_fields)]
 pub struct DepartureBoardRequest {
     minutes_after: u32,
-    limit: usize,
+    limit: u32,
     stop_groups: Vec<Vec<String>>,
 }
 
@@ -32,6 +32,7 @@ impl DepartureBoardRequest {
         if !(1..=20).contains(&limit) {
             return Err(PidRequestError::InvalidLimit(limit));
         }
+        let limit = u32::try_from(limit).map_err(|_| PidRequestError::InvalidLimit(limit))?;
         if stop_groups.is_empty() {
             return Err(PidRequestError::NoStopGroups);
         }
