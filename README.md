@@ -222,11 +222,17 @@ Add that command to `$PROFILE` to load it in future PowerShell sessions.
 
 ## Cache and stale data
 
-After every successful PID request, `pidjezdy` atomically replaces a snapshot
-in the platform-standard cache directory. The snapshot contains the raw,
-normalized departures, their fetch time, and the validated configuration that
-produced the request. A cache-write failure does not hide fresh results; it is
-reported as a warning on stderr.
+After every successful PID request containing at least one departure,
+`pidjezdy` atomically replaces a snapshot in the platform-standard cache
+directory. The snapshot contains the raw, normalized departures, their fetch
+time, and the validated configuration that produced the request. A cache-write
+failure does not hide fresh results; it is reported as a warning on stderr.
+
+A successful empty response is still rendered as fresh data, but it does not
+replace an existing non-empty snapshot. This protects the fallback from brief
+empty responses during provider degradation. If a later request fails, cached
+departures are selected again against the current time, so expired services are
+not resurrected.
 
 If PID cannot be reached or its response cannot be decoded, the CLI reads that
 snapshot only when its configuration exactly matches the current one. Cached

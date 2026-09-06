@@ -87,7 +87,11 @@ where
 {
     let (departures, data_updated_at, stale, cache_warning) = match sources.live {
         Ok(departures) => {
-            let warning = (sources.write_cache)(&departures).err();
+            let warning = if departures.is_empty() {
+                None
+            } else {
+                (sources.write_cache)(&departures).err()
+            };
             (departures, generated_at, false, warning)
         }
         Err(live) => {
@@ -275,6 +279,28 @@ mod tests {
             result.cache_warning,
             Some(CacheWriteError::DirectoryUnavailable)
         ));
+    }
+
+    #[test]
+    fn empty_live_result_does_not_overwrite_the_cache() {
+        let result = finish_query_with(
+            &fallback_config(),
+            3,
+            now(),
+            QuerySources {
+                live: Ok(Vec::new()),
+                write_cache: |_: &[Departure]| {
+                    unreachable!("an empty live result must not overwrite the cache")
+                },
+                read_cache: || unreachable!("a successful live request must not read the cache"),
+            },
+        )
+        .unwrap();
+
+        assert!(!result.stale);
+        assert_eq!(result.data_updated_at, now());
+        assert!(result.departures.is_empty());
+        assert!(result.cache_warning.is_none());
     }
 
     #[test]
