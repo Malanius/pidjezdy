@@ -6,7 +6,9 @@ fn main() -> ExitCode {
     match pidjezdy::run_from_env() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = write_error_report(&mut std::io::stderr().lock(), &error);
+            if !error.json_reported() {
+                let _ = write_error_report(&mut std::io::stderr().lock(), &error);
+            }
             ExitCode::FAILURE
         }
     }

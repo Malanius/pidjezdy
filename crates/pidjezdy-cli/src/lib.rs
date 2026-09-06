@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -16,7 +17,7 @@ mod output;
 use departures::query_departures;
 pub use departures::{DepartureQueryError, DepartureUnavailable};
 pub use output::OutputError;
-use output::{OutputFormat, write_departures};
+use output::{OutputFormat, write_departures, write_json_error};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
 const CONFIG_FILE: &str = "config.toml";
@@ -139,12 +140,58 @@ pub enum AppError {
     WriteDiagnostics(#[source] std::io::Error),
 }
 
+impl AppError {
+    fn json_kind(&self) -> &'static str {
+        match self {
+            Self::ConfigDirectoryUnavailable => "config_directory_unavailable",
+            Self::ConfigAlreadyExists(_) => "config_already_exists",
+            Self::CreateConfigDirectory { .. } => "config_directory_create_failed",
+            Self::CreateConfig { .. } => "config_create_failed",
+            Self::ReadConfig { .. } => "config_unreadable",
+            Self::InvalidConfig { .. } => "config_invalid",
+            Self::Departures(DepartureQueryError::Request(_)) => "request_invalid",
+            Self::Departures(DepartureQueryError::Unavailable(_)) => "departures_unavailable",
+            Self::Output(_) => "output_failed",
+            Self::WriteDiagnostics(_) => "diagnostics_write_failed",
+        }
+    }
+
+    fn can_report_as_json(&self) -> bool {
+        !matches!(self, Self::Output(OutputError::Write(_)))
+    }
+}
+
+#[derive(Debug)]
+pub struct CommandFailure {
+    error: AppError,
+    json_reported: bool,
+}
+
+impl CommandFailure {
+    #[must_use]
+    pub fn json_reported(&self) -> bool {
+        self.json_reported
+    }
+}
+
+impl fmt::Display for CommandFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.error.fmt(formatter)
+    }
+}
+
+impl std::error::Error for CommandFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        std::error::Error::source(&self.error)
+    }
+}
+
 /// Run the command using process arguments and environment.
 ///
 /// # Errors
 ///
 /// Returns configuration path, filesystem, parsing, or validation failures.
-pub fn run_from_env() -> Result<(), AppError> {
+pub fn run_from_env() -> Result<(), CommandFailure> {
     let cli = Cli::parse();
     let env_path = env::var_os(CONFIG_ENV).map(PathBuf::from);
     let mut stdout = std::io::stdout();
@@ -184,6 +231,42 @@ pub fn resolve_config_path(
 }
 
 fn run(
+    cli: Cli,
+    env_path: Option<&Path>,
+    styled_text: bool,
+    output: &mut impl Write,
+    diagnostics: &mut impl Write,
+) -> Result<(), CommandFailure> {
+    let json_errors = matches!(
+        &cli.command,
+        Command::Departures {
+            format: OutputFormat::Json,
+            ..
+        }
+    );
+    let result = run_command(cli, env_path, styled_text, output, diagnostics);
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if json_errors && error.can_report_as_json() => {
+            write_json_error(output, chrono::Utc::now(), &error).map_err(|error| {
+                CommandFailure {
+                    error: error.into(),
+                    json_reported: false,
+                }
+            })?;
+            Err(CommandFailure {
+                error,
+                json_reported: true,
+            })
+        }
+        Err(error) => Err(CommandFailure {
+            error,
+            json_reported: false,
+        }),
+    }
+}
+
+fn run_command(
     cli: Cli,
     env_path: Option<&Path>,
     styled_text: bool,
@@ -365,6 +448,60 @@ mod tests {
     }
 
     #[test]
+    fn json_departure_failures_emit_a_versioned_error_document() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "not = [valid").unwrap();
+        let cli = Cli::try_parse_from([
+            OsString::from("pidjezdy"),
+            OsString::from("--config"),
+            path.into_os_string(),
+            OsString::from("departures"),
+            OsString::from("--format"),
+            OsString::from("json"),
+        ])
+        .unwrap();
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        let failure = run(cli, None, false, &mut output, &mut diagnostics).unwrap_err();
+
+        assert!(failure.json_reported());
+        assert!(diagnostics.is_empty());
+        let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(document["schema_version"], output::JSON_SCHEMA_VERSION);
+        assert_eq!(document["error"]["kind"], "config_invalid");
+        assert!(
+            document["error"]["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("invalid configuration ")
+        );
+        assert_eq!(document["error"]["causes"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn text_departure_failures_do_not_write_an_error_document() {
+        let cli = Cli::try_parse_from([
+            "pidjezdy",
+            "--config",
+            "missing.toml",
+            "departures",
+            "--format",
+            "text",
+        ])
+        .unwrap();
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        let failure = run(cli, None, false, &mut output, &mut diagnostics).unwrap_err();
+
+        assert!(!failure.json_reported());
+        assert!(output.is_empty());
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
     fn departures_rejects_limits_outside_the_supported_range() {
         for limit in ["0", "21", "not-a-number"] {
             let error = Cli::try_parse_from(["pidjezdy", "departures", "--limit", limit])
@@ -399,5 +536,15 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(chain, ["could not write command output", "closed output"]);
+    }
+
+    #[test]
+    fn only_stdout_write_failures_prevent_json_error_reporting() {
+        let serialization = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let serialization = AppError::from(OutputError::Json(serialization));
+        let write = AppError::from(OutputError::Write(std::io::Error::other("closed output")));
+
+        assert!(serialization.can_report_as_json());
+        assert!(!write.can_report_as_json());
     }
 }
