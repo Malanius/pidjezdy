@@ -225,8 +225,9 @@ Add that command to `$PROFILE` to load it in future PowerShell sessions.
 After every successful PID request containing at least one departure,
 `pidjezdy` atomically replaces a snapshot in the platform-standard cache
 directory. The snapshot contains the raw, normalized departures, their fetch
-time, and the validated configuration that produced the request. A cache-write
-failure does not hide fresh results; it is reported as a warning on stderr.
+time, and the PID request that produced them: the time window, API limit, and
+grouped stop IDs. A cache-write failure does not hide fresh results; it is
+reported as a warning on stderr.
 
 A successful empty response is still rendered as fresh data, but it does not
 replace an existing non-empty snapshot. This protects the fallback from brief
@@ -235,9 +236,12 @@ departures are selected again against the current time, so expired services are
 not resurrected.
 
 If PID cannot be reached or its response cannot be decoded, the CLI reads that
-snapshot only when its configuration exactly matches the current one. Cached
-raw departures are filtered and ranked again using the current time, so trips
-that are no longer reachable disappear normally.
+snapshot only when its request exactly matches the current one. Cached raw
+departures are filtered and ranked again using the current time, so trips that
+are no longer reachable disappear normally. Changing presentation and
+selection settings—such as stop names, walking times, safety buffers, routes,
+quotas, or the display limit—does not invalidate the snapshot because those
+rules are reapplied when it is read.
 
 Cached output is always labeled. Text output starts with a line such as:
 
@@ -250,7 +254,7 @@ JSON sets `stale` to `true`, preserves the original fetch time in
 There is intentionally no hidden age threshold: consumers can use the explicit
 timestamps to choose their own policy, while departures naturally age out of
 the configured future window. A cache with an unsupported format, malformed
-content, or a different configuration is rejected instead of being shown.
+content, or a different request is rejected instead of being shown.
 
 In text mode, fatal diagnostics keep the first stderr line concise, then print
 each distinct underlying cause on an indented line. PID transport errors retain
