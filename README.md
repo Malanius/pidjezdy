@@ -142,9 +142,44 @@ human-readable text:
 pidjezdy departures --format json
 ```
 
-The JSON document contains `generated_at`, `data_updated_at`, a `stale` flag,
-and a `departures` array. Relative times are also included as exact seconds so
-consumers do not need to infer them from rounded labels.
+Successful JSON output has this envelope:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-05T08:00:00Z",
+  "data_updated_at": "2026-09-05T07:59:30Z",
+  "stale": false,
+  "departures": []
+}
+```
+
+Relative departure times are included as exact seconds so consumers do not
+need to infer them from rounded labels. When the command fails after accepting
+`--format json`, it writes one error document to stdout and exits non-zero:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-09-05T08:00:00Z",
+  "error": {
+    "kind": "departures_unavailable",
+    "message": "departures unavailable",
+    "causes": ["could not fetch PID departures", "connection refused"]
+  }
+}
+```
+
+`error.kind` is a stable machine-readable value. Departure queries can report
+`config_directory_unavailable`, `config_unreadable`, `config_invalid`,
+`request_invalid`, `departures_unavailable`, or `diagnostics_write_failed`.
+The human-readable `message` and `causes` may become more detailed over time
+and should not be parsed for control flow. Errors that prevent writing stdout
+itself cannot produce a JSON document.
+
+Consumers must require the supported `schema_version`. The version is bumped
+when a field is removed, renamed, retyped, or changes meaning without changing
+its name. Purely additive fields do not require a bump.
 
 ## Shell completions
 
@@ -211,10 +246,10 @@ timestamps to choose their own policy, while departures naturally age out of
 the configured future window. A cache with an unsupported format, malformed
 content, or a different configuration is rejected instead of being shown.
 
-Fatal diagnostics keep the first stderr line concise for status-bar consumers,
-then print each distinct underlying cause on an indented line. PID transport
-errors retain useful details such as timeouts or refused connections, while
-request URLs and configured stop IDs are omitted from the default report.
+In text mode, fatal diagnostics keep the first stderr line concise, then print
+each distinct underlying cause on an indented line. PID transport errors retain
+useful details such as timeouts or refused connections, while request URLs and
+configured stop IDs are omitted from the default report.
 
 ## Omarchy plugin
 
@@ -223,6 +258,10 @@ native popup containing the closest reachable departures selected by the CLI.
 It defaults to the right side of the bar, polls once per minute, and requests
 three departures so the popup remains compact. The plugin does not run a
 daemon or access PID directly.
+
+The plugin requests JSON and validates the shared envelope version for both
+successful and failed refreshes. It keeps the last successful departures
+visible when a later refresh fails.
 
 The CLI must be installed and configured first. When installing from the Git
 repository:
