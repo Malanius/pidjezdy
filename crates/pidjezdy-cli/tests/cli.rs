@@ -257,6 +257,19 @@ fn network_failure_reuses_and_reselects_a_compatible_cache() {
         stale["departures"][0]["leave_in_seconds"].as_i64().unwrap()
             < fresh["departures"][0]["leave_in_seconds"].as_i64().unwrap() - 50
     );
+
+    let stale_text = command(
+        directory.path(),
+        &config,
+        &unavailable_endpoint(),
+        &["departures", "--format", "text"],
+    );
+    assert!(stale_text.status.success());
+    assert!(
+        String::from_utf8(stale_text.stdout)
+            .unwrap()
+            .starts_with("STALE · data updated ")
+    );
 }
 
 #[test]
