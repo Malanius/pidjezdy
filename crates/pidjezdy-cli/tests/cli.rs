@@ -145,11 +145,14 @@ fn isolated_command(root: &Path) -> Command {
     command
 }
 
-fn unavailable_endpoint() -> String {
+fn disconnect_once() -> FixtureServer {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    drop(listener);
-    format!("http://{address}/departures")
+    let worker = thread::spawn(move || drop(accept_before_timeout(&listener)));
+    FixtureServer {
+        endpoint: format!("http://{address}/departures"),
+        worker,
+    }
 }
 
 #[test]
@@ -260,12 +263,14 @@ fn network_failure_reuses_and_reselects_a_compatible_cache() {
     let fresh: serde_json::Value = serde_json::from_slice(&fresh.stdout).unwrap();
 
     let config = write_config_with_walking_time(directory.path(), 5);
+    let disconnect = disconnect_once();
     let stale = command(
         directory.path(),
         &config,
-        &unavailable_endpoint(),
+        &disconnect.endpoint,
         &["departures", "--format", "json"],
     );
+    disconnect.finish();
 
     assert!(
         stale.status.success(),
@@ -280,12 +285,14 @@ fn network_failure_reuses_and_reselects_a_compatible_cache() {
             < fresh["departures"][0]["leave_in_seconds"].as_i64().unwrap() - 50
     );
 
+    let disconnect = disconnect_once();
     let stale_text = command(
         directory.path(),
         &config,
-        &unavailable_endpoint(),
+        &disconnect.endpoint,
         &["departures", "--format", "text"],
     );
+    disconnect.finish();
     assert!(stale_text.status.success());
     assert!(
         String::from_utf8(stale_text.stdout)
@@ -321,12 +328,14 @@ fn empty_success_does_not_destroy_the_network_fallback() {
     assert_eq!(empty["stale"], false);
     assert!(empty["departures"].as_array().unwrap().is_empty());
 
+    let disconnect = disconnect_once();
     let fallback = command(
         directory.path(),
         &config,
-        &unavailable_endpoint(),
+        &disconnect.endpoint,
         &["departures", "--format", "json"],
     );
+    disconnect.finish();
     assert!(
         fallback.status.success(),
         "{}",
@@ -342,12 +351,14 @@ fn network_and_cache_failure_reports_both_causes() {
     let directory = tempfile::tempdir().unwrap();
     let config = write_config(directory.path());
 
+    let disconnect = disconnect_once();
     let output = command(
         directory.path(),
         &config,
-        &unavailable_endpoint(),
+        &disconnect.endpoint,
         &["departures", "--format", "json"],
     );
+    disconnect.finish();
 
     assert!(!output.status.success());
     assert!(output.stderr.is_empty());
@@ -377,7 +388,7 @@ fn invalid_configuration_lists_validation_errors() {
     let output = command(
         directory.path(),
         &config,
-        &unavailable_endpoint(),
+        "http://127.0.0.1:1/departures",
         &["departures"],
     );
 
