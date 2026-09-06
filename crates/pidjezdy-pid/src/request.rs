@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
 use url::Url;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DepartureBoardRequest {
     minutes_after: u32,
     limit: usize,
@@ -137,5 +139,20 @@ mod tests {
             DepartureBoardRequest::new(120, 20, vec![vec![" ".into()]]),
             Err(PidRequestError::EmptyStopId { group: 0, stop: 0 })
         );
+    }
+
+    #[test]
+    fn request_round_trips_as_a_cache_key() {
+        let request = DepartureBoardRequest::new(
+            120,
+            20,
+            vec![vec![" U100Z1P ".into()], vec!["U200Z2P".into()]],
+        )
+        .unwrap();
+
+        let encoded = serde_json::to_vec(&request).unwrap();
+        let decoded = serde_json::from_slice(&encoded).unwrap();
+
+        assert_eq!(request, decoded);
     }
 }
