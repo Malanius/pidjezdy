@@ -155,6 +155,10 @@ impl AppError {
             Self::WriteDiagnostics(_) => "diagnostics_write_failed",
         }
     }
+
+    fn can_report_as_json(&self) -> bool {
+        !matches!(self, Self::Output(OutputError::Write(_)))
+    }
 }
 
 #[derive(Debug)]
@@ -243,7 +247,7 @@ fn run(
     let result = run_command(cli, env_path, styled_text, output, diagnostics);
     match result {
         Ok(()) => Ok(()),
-        Err(error) if json_errors && !matches!(error, AppError::Output(_)) => {
+        Err(error) if json_errors && error.can_report_as_json() => {
             write_json_error(output, chrono::Utc::now(), &error).map_err(|error| {
                 CommandFailure {
                     error: error.into(),
@@ -532,5 +536,15 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(chain, ["could not write command output", "closed output"]);
+    }
+
+    #[test]
+    fn only_stdout_write_failures_prevent_json_error_reporting() {
+        let serialization = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let serialization = AppError::from(OutputError::Json(serialization));
+        let write = AppError::from(OutputError::Write(std::io::Error::other("closed output")));
+
+        assert!(serialization.can_report_as_json());
+        assert!(!write.can_report_as_json());
     }
 }
