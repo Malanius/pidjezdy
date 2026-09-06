@@ -6,6 +6,7 @@ const Model = require("../Model.js")
 
 function output(overrides = {}) {
   return JSON.stringify({
+    schema_version: 1,
     generated_at: "2026-09-05T08:00:00Z",
     data_updated_at: "2026-09-05T07:57:00Z",
     stale: true,
@@ -39,10 +40,8 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.departureLimit(50), 20)
 })
 
-test("command errors strip only the exact CLI prefix", () => {
-  assert.equal(Model.commandError("pidjezdy: request failed\nmore detail", 1), "request failed")
-  assert.equal(Model.commandError("another command failed", 1), "another command failed")
-  assert.equal(Model.commandError("", 7), "pidjezdy exited with status 7")
+test("exit errors provide a fallback when no JSON document is available", () => {
+  assert.equal(Model.exitError(7), "pidjezdy exited with status 7")
 })
 
 test("parseOutput validates and flattens the CLI envelope", () => {
@@ -64,6 +63,44 @@ test("parseOutput rejects malformed envelopes and records", () => {
   assert.equal(Model.parseOutput("{}").ok, false)
   assert.equal(Model.parseOutput(output({ generated_at: "never" })).ok, false)
   assert.equal(Model.parseOutput(output({ departures: [{}] })).ok, false)
+})
+
+test("parseOutput requires the matching envelope version", () => {
+  assert.equal(Model.expectedSchemaVersion, 1)
+  assert.equal(
+    Model.parseOutput(output({ schema_version: 2 })).error,
+    "pidjezdy speaks envelope v2; this plugin needs v1 — update the plugin"
+  )
+  assert.equal(
+    Model.parseOutput(output({ schema_version: undefined })).error,
+    "pidjezdy speaks envelope vundefined; this plugin needs v1 — update the plugin"
+  )
+})
+
+test("parseOutput validates and exposes CLI error envelopes", () => {
+  var report = Model.parseOutput(JSON.stringify({
+    schema_version: 1,
+    generated_at: "2026-09-05T08:00:00Z",
+    error: {
+      kind: "departures_unavailable",
+      message: "departures unavailable",
+      causes: ["connection refused"]
+    }
+  }))
+  assert.deepEqual(report, {
+    ok: false,
+    commandError: true,
+    errorKind: "departures_unavailable",
+    error: "departures unavailable",
+    causes: ["connection refused"],
+    generatedAtMs: Date.parse("2026-09-05T08:00:00Z")
+  })
+
+  assert.equal(Model.parseOutput(JSON.stringify({
+    schema_version: 1,
+    generated_at: "2026-09-05T08:00:00Z",
+    error: { kind: "fetch_failed", message: "failed", causes: [7] }
+  })).error, "pidjezdy returned an unsupported error document")
 })
 
 test("currentDepartures advances countdowns and removes missed options", () => {

@@ -3,6 +3,8 @@
 // this adapter validates its JSON envelope and keeps countdowns honest between
 // polls. No Qt imports are used so the behavior stays testable with Node.
 
+var EXPECTED_SCHEMA_VERSION = 1
+
 function boundedInteger(value, fallback, minimum, maximum) {
   var numeric = typeof value === "number"
     || (typeof value === "string" && value.trim() !== "")
@@ -51,12 +53,46 @@ function normalizeDeparture(value) {
 function parseOutput(raw) {
   try {
     var document = JSON.parse(String(raw || ""))
-    if (!document || typeof document !== "object" || !Array.isArray(document.departures))
+    if (!document || typeof document !== "object" || Array.isArray(document))
       return { ok: false, error: "pidjezdy returned an unsupported JSON document" }
+    if (document.schema_version !== EXPECTED_SCHEMA_VERSION)
+      return {
+        ok: false,
+        error: "pidjezdy speaks envelope v" + String(document.schema_version)
+          + "; this plugin needs v" + EXPECTED_SCHEMA_VERSION + " — update the plugin"
+      }
 
     var generatedAtMs = Date.parse(String(document.generated_at || ""))
+    if (!isFinite(generatedAtMs))
+      return { ok: false, error: "pidjezdy returned invalid timestamps" }
+
+    if (document.error !== undefined) {
+      var rawError = document.error
+      if (!rawError || typeof rawError !== "object" || Array.isArray(rawError)
+          || nonEmptyString(rawError.kind) === "" || nonEmptyString(rawError.message) === ""
+          || !Array.isArray(rawError.causes))
+        return { ok: false, error: "pidjezdy returned an unsupported error document" }
+      var causes = []
+      for (var causeIndex = 0; causeIndex < rawError.causes.length; causeIndex++) {
+        var cause = nonEmptyString(rawError.causes[causeIndex])
+        if (cause === "")
+          return { ok: false, error: "pidjezdy returned an unsupported error document" }
+        causes.push(cause)
+      }
+      return {
+        ok: false,
+        commandError: true,
+        errorKind: nonEmptyString(rawError.kind),
+        error: nonEmptyString(rawError.message),
+        causes: causes,
+        generatedAtMs: generatedAtMs
+      }
+    }
+
+    if (!Array.isArray(document.departures))
+      return { ok: false, error: "pidjezdy returned an unsupported JSON document" }
     var dataUpdatedAtMs = Date.parse(String(document.data_updated_at || ""))
-    if (!isFinite(generatedAtMs) || !isFinite(dataUpdatedAtMs))
+    if (!isFinite(dataUpdatedAtMs))
       return { ok: false, error: "pidjezdy returned invalid timestamps" }
 
     var departures = []
@@ -122,11 +158,8 @@ function updateLabel(report, nowMs) {
   return (report.stale ? "STALE · " : "") + "updated " + ageMinutes + " min ago"
 }
 
-function commandError(stderrText, exitCode) {
-  var prefix = "pidjezdy: "
-  var message = String(stderrText || "").trim().split("\n")[0]
-  if (message.indexOf(prefix) === 0) message = message.substring(prefix.length)
-  return message || "pidjezdy exited with status " + exitCode
+function exitError(exitCode) {
+  return "pidjezdy exited with status " + exitCode
 }
 
 function tooltip(report, nowMs, errorMessage, loading) {
@@ -147,6 +180,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     normalizeDeparture: normalizeDeparture,
     parseOutput: parseOutput,
     elapsedSeconds: elapsedSeconds,
@@ -155,7 +189,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
     updateLabel: updateLabel,
-    commandError: commandError,
+    exitError: exitError,
     tooltip: tooltip
   }
 }

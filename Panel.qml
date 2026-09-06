@@ -27,7 +27,6 @@ Panel {
   property bool ready: false
   property bool refreshQueued: false
   property string stdoutText: ""
-  property string stderrText: ""
   property string errorMessage: ""
   property var report: null
   property double nowMs: Date.now()
@@ -47,7 +46,6 @@ Panel {
       return
     }
     stdoutText = ""
-    stderrText = ""
     queryProcess.command = [
       "pidjezdy", "departures",
       "--limit", String(requestedLimit),
@@ -59,16 +57,16 @@ Panel {
   function finishQuery(exitCode) {
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
-    if (exitCode === 0) {
-      var parsed = Model.parseOutput(stdoutText)
-      if (parsed.ok) {
-        report = parsed
-        errorMessage = ""
-      } else {
-        errorMessage = parsed.error
-      }
+    var parsed = Model.parseOutput(stdoutText)
+    if (parsed.ok && exitCode === 0) {
+      report = parsed
+      errorMessage = ""
+    } else if (parsed.commandError === true) {
+      errorMessage = parsed.error
+    } else if (exitCode !== 0 && String(stdoutText || "").trim() === "") {
+      errorMessage = Model.exitError(exitCode)
     } else {
-      errorMessage = Model.commandError(stderrText, exitCode)
+      errorMessage = parsed.ok ? Model.exitError(exitCode) : parsed.error
     }
 
     if (refreshQueued) {
@@ -131,11 +129,6 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.stdoutText = text
-    }
-
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.stderrText = text
     }
   }
 
