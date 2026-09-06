@@ -180,8 +180,8 @@ mod tests {
 
     use super::*;
 
-    const DEPARTURES: &[u8] = include_bytes!("../tests/fixtures/departures.json");
-    const ERROR: &[u8] = include_bytes!("../tests/fixtures/error.json");
+    const DEPARTURES: &[u8] = include_bytes!("../fixtures/departures.json");
+    const ERROR: &[u8] = include_bytes!("../fixtures/error.json");
 
     #[test]
     fn decodes_plain_and_gzip_bodies_by_magic_bytes() {

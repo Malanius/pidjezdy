@@ -1,6 +1,6 @@
 [
   [
-    {
+{
       "departure": {
         "timestamp_scheduled": "2026-09-04T12:10:00+02:00",
         "timestamp_predicted": "2026-09-04T12:12:00+02:00",

@@ -132,7 +132,7 @@ curl -i --get 'https://data.pid.cz/departures/data.php' \
 ```
 
 When the endpoint behavior changes, update the sanitized fixtures in
-`crates/pidjezdy-pid/tests/fixtures/`, the parser/client tests, and this
+`crates/pidjezdy-pid/fixtures/`, the parser/client tests, and this
 document together.
 
 [frontend]: https://data.pid.cz/departures/lib/departure-board.js
