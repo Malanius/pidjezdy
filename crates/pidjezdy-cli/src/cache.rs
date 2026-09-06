@@ -4,14 +4,14 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use directories::ProjectDirs;
-use pidjezdy_core::config::Config;
 use pidjezdy_core::departure::Departure;
+use pidjezdy_pid::DepartureBoardRequest;
 use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use thiserror::Error;
 
 const CACHE_FILE: &str = "departures.json";
-const CACHE_VERSION: u8 = 1;
+const CACHE_VERSION: u8 = 2;
 const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
 struct CacheFile {
     version: u8,
     fetched_at: DateTime<Utc>,
-    config: Config,
+    request: DepartureBoardRequest,
     departures: Vec<Departure>,
 }
 
@@ -77,24 +77,26 @@ pub(crate) enum CacheReadError {
     Deserialize(#[source] serde_json::Error),
     #[error("departure cache uses unsupported version {0}")]
     UnsupportedVersion(u8),
-    #[error("departure cache belongs to a different configuration")]
-    ConfigMismatch,
+    #[error("departure cache belongs to a different request")]
+    RequestMismatch,
     #[error("departure cache exceeded the {limit}-byte size limit")]
     TooLarge { limit: u64 },
 }
 
 pub(crate) fn write_snapshot(
-    config: &Config,
+    request: &DepartureBoardRequest,
     fetched_at: DateTime<Utc>,
     departures: &[Departure],
 ) -> Result<(), CacheWriteError> {
     let path = default_cache_path().ok_or(CacheWriteError::DirectoryUnavailable)?;
-    write_snapshot_to(&path, config, fetched_at, departures)
+    write_snapshot_to(&path, request, fetched_at, departures)
 }
 
-pub(crate) fn read_snapshot(config: &Config) -> Result<CacheSnapshot, CacheReadError> {
+pub(crate) fn read_snapshot(
+    request: &DepartureBoardRequest,
+) -> Result<CacheSnapshot, CacheReadError> {
     let path = default_cache_path().ok_or(CacheReadError::DirectoryUnavailable)?;
-    read_snapshot_from(&path, config)
+    read_snapshot_from(&path, request)
 }
 
 fn default_cache_path() -> Option<PathBuf> {
@@ -103,16 +105,16 @@ fn default_cache_path() -> Option<PathBuf> {
 
 fn write_snapshot_to(
     path: &Path,
-    config: &Config,
+    request: &DepartureBoardRequest,
     fetched_at: DateTime<Utc>,
     departures: &[Departure],
 ) -> Result<(), CacheWriteError> {
-    write_snapshot_to_with_limit(path, config, fetched_at, departures, MAX_CACHE_BYTES)
+    write_snapshot_to_with_limit(path, request, fetched_at, departures, MAX_CACHE_BYTES)
 }
 
 fn write_snapshot_to_with_limit(
     path: &Path,
-    config: &Config,
+    request: &DepartureBoardRequest,
     fetched_at: DateTime<Utc>,
     departures: &[Departure],
     max_bytes: u64,
@@ -132,7 +134,7 @@ fn write_snapshot_to_with_limit(
         &CacheFile {
             version: CACHE_VERSION,
             fetched_at,
-            config: config.clone(),
+            request: request.clone(),
             departures: departures.to_vec(),
         },
     )
@@ -167,7 +169,10 @@ fn cache_directory(path: &Path) -> &Path {
         .unwrap_or_else(|| Path::new("."))
 }
 
-fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, CacheReadError> {
+fn read_snapshot_from(
+    path: &Path,
+    request: &DepartureBoardRequest,
+) -> Result<CacheSnapshot, CacheReadError> {
     let file = fs::File::open(path).map_err(|source| {
         if source.kind() == std::io::ErrorKind::NotFound {
             CacheReadError::NotFound {
@@ -192,8 +197,8 @@ fn read_snapshot_from(path: &Path, config: &Config) -> Result<CacheSnapshot, Cac
     if cached.version != CACHE_VERSION {
         return Err(CacheReadError::UnsupportedVersion(cached.version));
     }
-    if cached.config != *config {
-        return Err(CacheReadError::ConfigMismatch);
+    if cached.request != *request {
+        return Err(CacheReadError::RequestMismatch);
     }
     Ok(CacheSnapshot {
         fetched_at: cached.fetched_at,
@@ -226,20 +231,8 @@ mod tests {
             .to_utc()
     }
 
-    fn config() -> Config {
-        Config::from_toml(
-            r#"
-                [[boarding_points]]
-                name = "Nearby stop"
-                stop_ids = ["U100Z1P"]
-                walking_minutes = 4
-
-                [[boarding_points.routes]]
-                line = "158"
-                headsign = "Centre"
-            "#,
-        )
-        .unwrap()
+    fn request() -> DepartureBoardRequest {
+        DepartureBoardRequest::new(120, 20, vec![vec!["U100Z1P".into()]]).unwrap()
     }
 
     fn departure(trip_id: &str) -> Departure {
@@ -262,10 +255,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("nested/departures.json");
 
-        write_snapshot_to(&path, &config(), now(), &[departure("old")]).unwrap();
+        write_snapshot_to(&path, &request(), now(), &[departure("old")]).unwrap();
         write_snapshot_to(
             &path,
-            &config(),
+            &request(),
             now() + TimeDelta::minutes(1),
             &[departure("new")],
         )
@@ -274,8 +267,12 @@ mod tests {
         let cached: CacheFile = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(cached.version, CACHE_VERSION);
         assert_eq!(cached.fetched_at, now() + TimeDelta::minutes(1));
-        assert_eq!(cached.config, config());
+        assert_eq!(cached.request, request());
         assert_eq!(cached.departures[0].trip_id, "new");
+        let document: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(document.get("request").is_some());
+        assert!(document.get("config").is_none());
         assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
     }
 
@@ -283,27 +280,27 @@ mod tests {
     fn reads_only_matching_supported_snapshots() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("departures.json");
-        let configured = config();
+        let configured = request();
         write_snapshot_to(&path, &configured, now(), &[departure("cached")]).unwrap();
 
         let cached = read_snapshot_from(&path, &configured).unwrap();
         assert_eq!(cached.fetched_at, now());
         assert_eq!(cached.departures[0].trip_id, "cached");
 
-        let mut other_config = configured.clone();
-        other_config.boarding_points[0].walking_minutes = 5;
+        let other_request =
+            DepartureBoardRequest::new(90, 20, vec![vec!["U100Z1P".into()]]).unwrap();
         assert!(matches!(
-            read_snapshot_from(&path, &other_config),
-            Err(CacheReadError::ConfigMismatch)
+            read_snapshot_from(&path, &other_request),
+            Err(CacheReadError::RequestMismatch)
         ));
 
         let mut document: serde_json::Value =
             serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        document["version"] = 2.into();
+        document["version"] = 3.into();
         fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
         assert!(matches!(
             read_snapshot_from(&path, &configured),
-            Err(CacheReadError::UnsupportedVersion(2))
+            Err(CacheReadError::UnsupportedVersion(3))
         ));
     }
 
@@ -318,7 +315,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            read_snapshot_from(&path, &config()),
+            read_snapshot_from(&path, &request()),
             Err(CacheReadError::TooLarge {
                 limit: MAX_CACHE_BYTES
             })
@@ -330,7 +327,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("departures.json");
 
-        let error = read_snapshot_from(&path, &config()).unwrap_err();
+        let error = read_snapshot_from(&path, &request()).unwrap_err();
 
         assert!(matches!(
             &error,
@@ -347,8 +344,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("departures.json");
 
-        let error = write_snapshot_to_with_limit(&path, &config(), now(), &[departure("large")], 1)
-            .unwrap_err();
+        let error =
+            write_snapshot_to_with_limit(&path, &request(), now(), &[departure("large")], 1)
+                .unwrap_err();
 
         assert!(matches!(error, CacheWriteError::TooLarge { limit: 1 }));
         assert!(!path.exists());
@@ -361,7 +359,7 @@ mod tests {
         fs::create_dir(&destination).unwrap();
 
         let error =
-            write_snapshot_to(&destination, &config(), now(), &[departure("cached")]).unwrap_err();
+            write_snapshot_to(&destination, &request(), now(), &[departure("cached")]).unwrap_err();
 
         assert!(matches!(
             error,
@@ -396,8 +394,8 @@ mod tests {
                 Some(expected_path.as_path())
             );
 
-            write_snapshot(&config(), now(), &[departure("platform-cache")]).unwrap();
-            let cached = read_snapshot(&config()).unwrap();
+            write_snapshot(&request(), now(), &[departure("platform-cache")]).unwrap();
+            let cached = read_snapshot(&request()).unwrap();
             assert_eq!(cached.fetched_at, now());
             assert_eq!(cached.departures[0].trip_id, "platform-cache");
             return;
