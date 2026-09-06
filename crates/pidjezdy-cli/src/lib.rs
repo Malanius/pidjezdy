@@ -8,6 +8,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use directories::ProjectDirs;
 use pidjezdy_core::config::{Config, ConfigError};
+use pidjezdy_pid::DEFAULT_ENDPOINT;
 use thiserror::Error;
 
 mod cache;
@@ -20,6 +21,7 @@ pub use output::OutputError;
 use output::{OutputFormat, write_departures, write_json_error};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
+const ENDPOINT_ENV: &str = "PIDJEZDY_ENDPOINT";
 const CONFIG_FILE: &str = "config.toml";
 
 pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"# pidjezdy configuration
@@ -194,6 +196,7 @@ impl std::error::Error for CommandFailure {
 pub fn run_from_env() -> Result<(), CommandFailure> {
     let cli = Cli::parse();
     let env_path = env::var_os(CONFIG_ENV).map(PathBuf::from);
+    let env_endpoint = env::var(ENDPOINT_ENV).ok();
     let mut stdout = std::io::stdout();
     let styled_text = stdout.is_terminal()
         && env::var_os("NO_COLOR").is_none()
@@ -201,6 +204,7 @@ pub fn run_from_env() -> Result<(), CommandFailure> {
     run(
         cli,
         env_path.as_deref(),
+        env_endpoint.as_deref(),
         styled_text,
         &mut stdout,
         &mut std::io::stderr(),
@@ -230,9 +234,16 @@ pub fn resolve_config_path(
         .ok_or(AppError::ConfigDirectoryUnavailable)
 }
 
+fn resolve_endpoint(environment: Option<&str>) -> &str {
+    environment
+        .filter(|endpoint| !endpoint.is_empty())
+        .unwrap_or(DEFAULT_ENDPOINT)
+}
+
 fn run(
     cli: Cli,
     env_path: Option<&Path>,
+    env_endpoint: Option<&str>,
     styled_text: bool,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
@@ -244,7 +255,14 @@ fn run(
             ..
         }
     );
-    let result = run_command(cli, env_path, styled_text, output, diagnostics);
+    let result = run_command(
+        cli,
+        env_path,
+        resolve_endpoint(env_endpoint),
+        styled_text,
+        output,
+        diagnostics,
+    );
     match result {
         Ok(()) => Ok(()),
         Err(error) if json_errors && error.can_report_as_json() => {
@@ -269,6 +287,7 @@ fn run(
 fn run_command(
     cli: Cli,
     env_path: Option<&Path>,
+    endpoint: &str,
     styled_text: bool,
     output: &mut impl Write,
     diagnostics: &mut impl Write,
@@ -277,7 +296,11 @@ fn run_command(
         Command::Departures { limit, format } => {
             let path = resolve_config_path(cli.config.as_deref(), env_path)?;
             let config = load_config(&path)?;
-            let query = query_departures(&config, limit.unwrap_or(config.display.max_departures))?;
+            let query = query_departures(
+                &config,
+                limit.unwrap_or(config.display.max_departures),
+                endpoint,
+            )?;
             if let Some(warning) = &query.cache_warning {
                 writeln!(diagnostics, "pidjezdy: warning: {warning}")
                     .map_err(AppError::WriteDiagnostics)?;
@@ -423,7 +446,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        run(cli, None, false, &mut output, &mut diagnostics).unwrap();
+        run(cli, None, None, false, &mut output, &mut diagnostics).unwrap();
 
         assert!(
             String::from_utf8(output)
@@ -464,7 +487,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        let failure = run(cli, None, false, &mut output, &mut diagnostics).unwrap_err();
+        let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
 
         assert!(failure.json_reported());
         assert!(diagnostics.is_empty());
@@ -494,7 +517,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        let failure = run(cli, None, false, &mut output, &mut diagnostics).unwrap_err();
+        let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
 
         assert!(!failure.json_reported());
         assert!(output.is_empty());
@@ -517,7 +540,7 @@ mod tests {
         let mut output = Vec::new();
         let mut diagnostics = Vec::new();
 
-        run(cli, None, false, &mut output, &mut diagnostics).unwrap();
+        run(cli, None, None, false, &mut output, &mut diagnostics).unwrap();
 
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("pidjezdy"));
@@ -536,6 +559,16 @@ mod tests {
         .collect::<Vec<_>>();
 
         assert_eq!(chain, ["could not write command output", "closed output"]);
+    }
+
+    #[test]
+    fn endpoint_environment_uses_nonempty_overrides() {
+        assert_eq!(resolve_endpoint(None), DEFAULT_ENDPOINT);
+        assert_eq!(resolve_endpoint(Some("")), DEFAULT_ENDPOINT);
+        assert_eq!(
+            resolve_endpoint(Some("http://127.0.0.1:1234/departures")),
+            "http://127.0.0.1:1234/departures"
+        );
     }
 
     #[test]

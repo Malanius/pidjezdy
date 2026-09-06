@@ -55,9 +55,10 @@ pub struct DepartureUnavailable {
 pub(crate) fn query_departures(
     config: &Config,
     limit: usize,
+    endpoint: &str,
 ) -> Result<DepartureQuery, DepartureQueryError> {
     let request = configured_request(config)?;
-    let live = PidClient::new()
+    let live = PidClient::with_endpoint(endpoint)
         .map_err(LiveDepartureError::CreateClient)
         .and_then(|client| client.fetch(&request).map_err(LiveDepartureError::Fetch));
     let generated_at = Utc::now();
