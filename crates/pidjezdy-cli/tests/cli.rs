@@ -422,6 +422,35 @@ fn invalid_configuration_lists_validation_errors() {
 }
 
 #[test]
+fn config_check_rejects_a_limit_above_the_pid_api_cap() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("config.toml");
+    fs::write(
+        &config,
+        pidjezdy::DEFAULT_CONFIG_TEMPLATE.replace("api_limit = 20", "api_limit = 21"),
+    )
+    .unwrap();
+    let output = isolated_command(directory.path())
+        .arg("--config")
+        .arg(config)
+        .args(["config", "check"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let diagnostics = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostics.contains("could not build PID departure request"),
+        "{diagnostics}"
+    );
+    assert!(
+        diagnostics.contains("PID API limit must be between 1 and 20, got 21"),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn cache_path_does_not_require_valid_configuration() {
     let directory = tempfile::tempdir().unwrap();
     let config = directory.path().join("invalid.toml");
