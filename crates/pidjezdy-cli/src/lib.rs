@@ -325,7 +325,7 @@ fn run_command(
                 limit.unwrap_or(config.display.max_departures),
                 endpoint,
             )?;
-            if let Some(warning) = &query.cache_warning {
+            for warning in &query.warnings {
                 writeln!(diagnostics, "pidjezdy: warning: {warning}")
                     .map_err(AppError::WriteDiagnostics)?;
             }

@@ -13,7 +13,13 @@ pub(crate) struct DepartureQuery {
     pub(crate) data_updated_at: DateTime<Utc>,
     pub(crate) stale: bool,
     pub(crate) departures: Vec<SelectedDeparture>,
-    pub(crate) cache_warning: Option<CacheWriteError>,
+    pub(crate) warnings: Vec<DepartureWarning>,
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum DepartureWarning {
+    #[error(transparent)]
+    CacheWrite(#[from] CacheWriteError),
 }
 
 struct QuerySources<WriteCache, ReadCache> {
@@ -86,20 +92,24 @@ where
     WriteCache: FnOnce(&[Departure]) -> Result<(), CacheWriteError>,
     ReadCache: FnOnce() -> Result<CacheSnapshot, CacheReadError>,
 {
-    let (departures, data_updated_at, stale, cache_warning) = match sources.live {
+    let (departures, data_updated_at, stale, warnings) = match sources.live {
         Ok(departures) => {
-            let warning = if departures.is_empty() {
-                None
+            let warnings = if departures.is_empty() {
+                Vec::new()
             } else {
-                (sources.write_cache)(&departures).err()
+                (sources.write_cache)(&departures)
+                    .err()
+                    .map(DepartureWarning::from)
+                    .into_iter()
+                    .collect()
             };
-            (departures, generated_at, false, warning)
+            (departures, generated_at, false, warnings)
         }
         Err(live) => {
             let cached = (sources.read_cache)().map_err(|cache| {
                 DepartureQueryError::Unavailable(DepartureUnavailable { live, cache })
             })?;
-            (cached.departures, cached.fetched_at, true, None)
+            (cached.departures, cached.fetched_at, true, Vec::new())
         }
     };
     let departures = select_departures(
@@ -116,7 +126,7 @@ where
         data_updated_at,
         stale,
         departures,
-        cache_warning,
+        warnings,
     })
 }
 
@@ -274,7 +284,7 @@ mod tests {
         assert_eq!(result.data_updated_at, cached_at);
         assert_eq!(result.departures.len(), 1);
         assert_eq!(result.departures[0].leave_in_seconds, 4 * 60);
-        assert!(result.cache_warning.is_none());
+        assert!(result.warnings.is_empty());
     }
 
     #[test]
@@ -295,8 +305,10 @@ mod tests {
         assert!(!result.stale);
         assert_eq!(result.data_updated_at, now());
         assert!(matches!(
-            result.cache_warning,
-            Some(CacheWriteError::DirectoryUnavailable)
+            result.warnings.as_slice(),
+            [DepartureWarning::CacheWrite(
+                CacheWriteError::DirectoryUnavailable
+            )]
         ));
     }
 
@@ -319,7 +331,7 @@ mod tests {
         assert!(!result.stale);
         assert_eq!(result.data_updated_at, now());
         assert!(result.departures.is_empty());
-        assert!(result.cache_warning.is_none());
+        assert!(result.warnings.is_empty());
     }
 
     #[test]
