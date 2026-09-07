@@ -346,7 +346,10 @@ Panel {
                   }
 
                   Text {
-                    text: Model.departureLabel(modelData.departsSeconds)
+                    text: Model.departureTimingLabel(
+                      modelData.delaySeconds,
+                      modelData.departsSeconds
+                    )
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption

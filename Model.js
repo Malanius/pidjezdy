@@ -45,6 +45,12 @@ function normalizeDeparture(value) {
   var boardingPoint = nonEmptyString(value.boarding_point_name)
   var leaveSeconds = finiteNumber(value.leave_in_seconds)
   var departsSeconds = finiteNumber(value.departs_in_seconds)
+  var delaySeconds = null
+  if (raw.delay_seconds !== null && raw.delay_seconds !== undefined) {
+    delaySeconds = finiteNumber(raw.delay_seconds)
+    if (delaySeconds === null) return null
+    delaySeconds = delaySeconds < 0 ? Math.ceil(delaySeconds) : Math.floor(delaySeconds)
+  }
   if (line === "" || headsign === "" || boardingPoint === ""
       || leaveSeconds === null || departsSeconds === null) return null
   return {
@@ -52,6 +58,7 @@ function normalizeDeparture(value) {
     headsign: headsign,
     boardingPoint: boardingPoint,
     platform: nonEmptyString(raw.platform_code),
+    delaySeconds: delaySeconds,
     leaveSeconds: Math.floor(leaveSeconds),
     departsSeconds: Math.floor(departsSeconds)
   }
@@ -153,6 +160,7 @@ function currentDepartures(report, nowMs) {
       headsign: row.headsign,
       boardingPoint: row.boardingPoint,
       platform: row.platform,
+      delaySeconds: row.delaySeconds,
       leaveSeconds: leaveSeconds,
       departsSeconds: row.departsSeconds - elapsed
     })
@@ -173,6 +181,7 @@ function currentCancellations(report, nowMs) {
       headsign: row.headsign,
       boardingPoint: row.boardingPoint,
       platform: row.platform,
+      delaySeconds: row.delaySeconds,
       leaveSeconds: row.leaveSeconds - elapsed,
       departsSeconds: departsSeconds
     })
@@ -191,6 +200,20 @@ function leaveLabel(seconds) {
 
 function departureLabel(seconds) {
   return "departs in " + wholeMinutes(seconds) + " min"
+}
+
+function delayLabel(delaySeconds) {
+  if (delaySeconds === null || delaySeconds === undefined || !isFinite(Number(delaySeconds)))
+    return ""
+  var delay = Number(delaySeconds)
+  if (delay >= 60) return "+" + Math.floor(delay / 60) + " late"
+  if (delay <= -60) return "-" + Math.floor(Math.abs(delay) / 60) + " early"
+  return ""
+}
+
+function departureTimingLabel(delaySeconds, departsSeconds) {
+  var delay = delayLabel(delaySeconds)
+  return (delay ? delay + ", " : "") + departureLabel(departsSeconds)
 }
 
 function cancellationLabel(seconds) {
@@ -263,6 +286,8 @@ if (typeof module !== "undefined" && module && module.exports) {
     wholeMinutes: wholeMinutes,
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
+    delayLabel: delayLabel,
+    departureTimingLabel: departureTimingLabel,
     cancellationLabel: cancellationLabel,
     staleAgeLabel: staleAgeLabel,
     updateLabel: updateLabel,

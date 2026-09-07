@@ -240,6 +240,17 @@ fn cancellation_note(selected: &SelectedDeparture) -> String {
     )
 }
 
+fn delay_label(delay_seconds: Option<i64>) -> Option<String> {
+    let delay_seconds = delay_seconds?;
+    if delay_seconds >= 60 {
+        Some(format!("+{} late", delay_seconds / 60))
+    } else if delay_seconds <= -60 {
+        Some(format!("-{} early", delay_seconds.unsigned_abs() / 60))
+    } else {
+        None
+    }
+}
+
 struct TextRow<'a> {
     line: &'a str,
     headsign: &'a str,
@@ -263,12 +274,18 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
             format!("leave in {} min", selected.leave_in_minutes())
         };
 
+        let departs = format!("departs in {} min", selected.departs_in_minutes());
+        let departs = match delay_label(departure.delay_seconds) {
+            Some(delay) => format!("{delay}, {departs}"),
+            None => departs,
+        };
+
         Self {
             line: &departure.line,
             headsign: &departure.headsign,
             boarding: format!("{}{platform}", selected.boarding_point_name),
             leave,
-            departs: format!("departs in {} min", selected.departs_in_minutes()),
+            departs,
         }
     }
 }
@@ -544,5 +561,37 @@ mod tests {
         ] {
             assert_eq!(stale_age_label(seconds), expected);
         }
+    }
+
+    #[test]
+    fn delay_labels_only_material_late_and_early_running() {
+        for (delay, expected) in [
+            (None, None),
+            (Some(0), None),
+            (Some(59), None),
+            (Some(60), Some("+1 late")),
+            (Some(125), Some("+2 late")),
+            (Some(-59), None),
+            (Some(-60), Some("-1 early")),
+            (Some(-125), Some("-2 early")),
+        ] {
+            assert_eq!(delay_label(delay).as_deref(), expected);
+        }
+    }
+
+    #[test]
+    fn text_output_includes_material_delay_on_the_secondary_line() {
+        let mut departure = selected();
+        departure.departure.delay_seconds = Some(125);
+        let query = departure_query(vec![departure], now(), false);
+        let mut output = Vec::new();
+
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
+
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .contains("+2 late, departs in 10 min")
+        );
     }
 }
