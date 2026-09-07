@@ -28,6 +28,7 @@ Panel {
   property bool ready: false
   property bool refreshQueued: false
   property string stdoutText: ""
+  property string stderrText: ""
   property string errorMessage: ""
   property var report: null
   property double nowMs: Date.now()
@@ -47,6 +48,7 @@ Panel {
       return
     }
     stdoutText = ""
+    stderrText = ""
     queryProcess.command = [
       root.binaryPath, "departures",
       "--limit", String(requestedLimit),
@@ -65,7 +67,9 @@ Panel {
     } else if (parsed.commandError === true) {
       errorMessage = parsed.error
     } else if (exitCode !== 0 && String(stdoutText || "").trim() === "") {
-      errorMessage = Model.commandError(root.binaryPath)
+      errorMessage = String(stderrText || "").trim() === ""
+        ? Model.commandError(root.binaryPath)
+        : Model.stderrError(stderrText, exitCode)
     } else {
       errorMessage = parsed.ok ? Model.exitError(exitCode) : parsed.error
     }
@@ -131,6 +135,11 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.stdoutText = text
+    }
+
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.stderrText = text
     }
   }
 

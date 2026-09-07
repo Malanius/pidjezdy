@@ -173,6 +173,11 @@ function commandError(binaryPath) {
   return "could not run " + binaryPath + " — check the plugin's binary path setting"
 }
 
+function stderrError(stderr, exitCode) {
+  var diagnostic = nonEmptyString(stderr).split(/\r?\n/)[0]
+  return diagnostic || exitError(exitCode)
+}
+
 function tooltip(report, nowMs, errorMessage, loading) {
   var rows = currentDepartures(report, nowMs)
   if (rows.length > 0) {
@@ -204,6 +209,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     updateLabel: updateLabel,
     exitError: exitError,
     commandError: commandError,
+    stderrError: stderrError,
     tooltip: tooltip
   }
 }
