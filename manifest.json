@@ -25,7 +25,7 @@
       {
         "key": "binaryPath",
         "type": "string",
-        "label": "pidjezdy binary",
+        "label": "pidjezdy executable",
         "defaultValue": "pidjezdy"
       },
       {
