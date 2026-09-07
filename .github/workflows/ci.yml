@@ -38,7 +38,9 @@ jobs:
               process.exit(1);
             }
             const core = fs.readFileSync("crates/pidjezdy-core/src/config.rs", "utf8");
-            const displayLimit = core.match(/pub const MAX_DISPLAY_DEPARTURES: usize = (\d+);/);
+            const displayLimit = core.match(
+              /pub\s+const\s+MAX_DISPLAY_DEPARTURES\s*:\s*usize\s*=\s*(\d+)\s*;/
+            );
             const manifestLimit = plugin.barWidget.schema.find(setting => setting.key === "limit");
             if (!displayLimit
                 || model.maxDisplayDepartures !== Number(displayLimit[1])
