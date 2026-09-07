@@ -292,8 +292,14 @@ fn short_capped_response_warns_on_stderr() {
     assert_eq!(document["departures"].as_array().unwrap().len(), 1);
     let diagnostics = String::from_utf8(output.stderr).unwrap();
     assert!(
-        diagnostics.contains(
-            "pidjezdy: warning: \"Nearby stop\" hit the 3-departure API limit, covering only the next 27 of 120 requested minutes"
+        diagnostics.starts_with(
+            "pidjezdy: warning: \"Nearby stop\" hit the 3-departure API limit, covering only the next "
+        ),
+        "{diagnostics}"
+    );
+    assert!(
+        diagnostics.ends_with(
+            " of 120 requested minutes; matching departures beyond that are not visible\n"
         ),
         "{diagnostics}"
     );
