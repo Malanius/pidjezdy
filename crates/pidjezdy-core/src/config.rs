@@ -77,8 +77,8 @@ impl Config {
         if self.fetch.minutes_after == 0 {
             errors.push("fetch.minutes_after must be greater than 0".into());
         }
-        if !(1..=20).contains(&self.fetch.api_limit) {
-            errors.push("fetch.api_limit must be between 1 and 20".into());
+        if self.fetch.api_limit == 0 {
+            errors.push("fetch.api_limit must be greater than 0".into());
         }
         if self.boarding_points.is_empty() {
             errors.push("at least one boarding point is required".into());
@@ -436,7 +436,7 @@ mod tests {
             boarding_points: Vec::new(),
         };
         let errors = config.validate().unwrap_err();
-        assert_eq!(errors.0.len(), 4);
+        assert_eq!(errors.0.len(), 3);
     }
 
     #[test]

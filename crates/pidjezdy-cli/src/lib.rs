@@ -15,8 +15,8 @@ mod cache;
 mod departures;
 mod output;
 
-use departures::query_departures;
 pub use departures::{DepartureQueryError, DepartureUnavailable};
+use departures::{configured_request, query_departures};
 pub use output::OutputError;
 use output::{OutputFormat, write_departures, write_json_error};
 
@@ -341,7 +341,8 @@ fn run_command(
                 }
                 ConfigCommand::Init => init_config(&path, output),
                 ConfigCommand::Check => {
-                    load_config(&path)?;
+                    let config = load_config(&path)?;
+                    configured_request(&config).map_err(DepartureQueryError::from)?;
                     writeln!(output, "configuration is valid: {}", path.display())
                         .map_err(OutputError::from)?;
                     Ok(())
@@ -502,6 +503,44 @@ mod tests {
             String::from_utf8(output)
                 .unwrap()
                 .contains("configuration is valid")
+        );
+    }
+
+    #[test]
+    fn config_check_rejects_limits_above_the_pid_api_cap() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(
+            &path,
+            DEFAULT_CONFIG_TEMPLATE.replace("api_limit = 20", "api_limit = 21"),
+        )
+        .unwrap();
+        let cli = Cli::try_parse_from([
+            OsString::from("pidjezdy"),
+            OsString::from("--config"),
+            path.into_os_string(),
+            OsString::from("config"),
+            OsString::from("check"),
+        ])
+        .unwrap();
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
+        let causes = std::iter::successors(
+            Some(&failure as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+        assert!(output.is_empty());
+        assert!(diagnostics.is_empty());
+        assert!(
+            causes
+                .iter()
+                .any(|cause| cause == "PID API limit must be between 1 and 20, got 21"),
+            "{causes:?}"
         );
     }
 
