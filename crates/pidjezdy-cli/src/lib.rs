@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use directories::ProjectDirs;
-use pidjezdy_core::config::{Config, ConfigError};
+use pidjezdy_core::config::{Config, ConfigError, MAX_DISPLAY_DEPARTURES};
 use pidjezdy_pid::DEFAULT_ENDPOINT;
 use thiserror::Error;
 
@@ -90,12 +90,12 @@ enum Command {
 }
 
 fn parse_departure_limit(value: &str) -> Result<usize, String> {
-    const ERROR: &str = "limit must be an integer between 1 and 20";
-    let limit = value.parse::<usize>().map_err(|_| ERROR.to_owned())?;
-    if (1..=20).contains(&limit) {
+    let error = || format!("limit must be an integer between 1 and {MAX_DISPLAY_DEPARTURES}");
+    let limit = value.parse::<usize>().map_err(|_| error())?;
+    if (1..=MAX_DISPLAY_DEPARTURES).contains(&limit) {
         Ok(limit)
     } else {
-        Err(ERROR.to_owned())
+        Err(error())
     }
 }
 
