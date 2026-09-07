@@ -45,8 +45,12 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.binaryPath(" /opt/pidjezdy/bin/pidjezdy "), "/opt/pidjezdy/bin/pidjezdy")
 })
 
-test("exit errors provide a fallback when no JSON document is available", () => {
+test("process errors distinguish failed launches from failed runs", () => {
   assert.equal(Model.exitError(7), "pidjezdy exited with status 7")
+  assert.equal(
+    Model.commandError("/missing/pidjezdy"),
+    "could not run /missing/pidjezdy — check the plugin's binary path setting"
+  )
 })
 
 test("parseOutput validates and flattens the CLI envelope", () => {

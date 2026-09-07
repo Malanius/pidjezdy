@@ -169,6 +169,10 @@ function exitError(exitCode) {
   return "pidjezdy exited with status " + exitCode
 }
 
+function commandError(binaryPath) {
+  return "could not run " + binaryPath + " — check the plugin's binary path setting"
+}
+
 function tooltip(report, nowMs, errorMessage, loading) {
   var rows = currentDepartures(report, nowMs)
   if (rows.length > 0) {
@@ -199,6 +203,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     departureLabel: departureLabel,
     updateLabel: updateLabel,
     exitError: exitError,
+    commandError: commandError,
     tooltip: tooltip
   }
 }

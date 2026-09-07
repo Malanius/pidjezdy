@@ -65,7 +65,7 @@ Panel {
     } else if (parsed.commandError === true) {
       errorMessage = parsed.error
     } else if (exitCode !== 0 && String(stdoutText || "").trim() === "") {
-      errorMessage = Model.exitError(exitCode)
+      errorMessage = Model.commandError(root.binaryPath)
     } else {
       errorMessage = parsed.ok ? Model.exitError(exitCode) : parsed.error
     }
