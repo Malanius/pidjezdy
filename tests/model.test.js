@@ -14,7 +14,8 @@ function output(overrides = {}) {
       departure: {
         line: " 158 ",
         headsign: " Letňany ",
-        platform_code: " A "
+        platform_code: " A ",
+        delay_seconds: 125
       },
       boarding_point_name: " Nové Letňany ",
       leave_in_seconds: 270,
@@ -68,6 +69,7 @@ test("parseOutput validates and flattens the CLI envelope", () => {
     headsign: "Letňany",
     boardingPoint: "Nové Letňany",
     platform: "A",
+    delaySeconds: 125,
     leaveSeconds: 270,
     departsSeconds: 630
   })
@@ -148,6 +150,7 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   assert.equal(rows[0].line, "195")
   assert.equal(rows[0].leaveSeconds, 60)
   assert.equal(rows[0].departsSeconds, 540)
+  assert.equal(rows[0].delaySeconds, null)
 })
 
 test("cancellations are validated, advanced, and removed after departure", () => {
@@ -181,6 +184,41 @@ test("countdown labels round down conservatively", () => {
   assert.equal(Model.leaveLabel(59), "leave now")
   assert.equal(Model.departureLabel(659), "departs in 10 min")
   assert.equal(Model.cancellationLabel(659), "would have departed in 10 min")
+})
+
+test("delay labels only material late and early running", () => {
+  for (const [delay, expected] of [
+    [null, ""],
+    [0, ""],
+    [59, ""],
+    [60, "+1 late"],
+    [125, "+2 late"],
+    [-59, ""],
+    [-60, "-1 early"],
+    [-125, "-2 early"]
+  ]) {
+    assert.equal(Model.delayLabel(delay), expected)
+  }
+  assert.equal(
+    Model.departureTimingLabel(125, 659),
+    "+2 late, departs in 10 min"
+  )
+  assert.equal(Model.departureTimingLabel(null, 659), "departs in 10 min")
+})
+
+test("stale age uses human scale boundaries", () => {
+  for (const [seconds, expected] of [
+    [0, "just now"],
+    [59, "just now"],
+    [60, "1 min ago"],
+    [3599, "59 min ago"],
+    [3600, "1h 0m ago"],
+    [7800, "2h 10m ago"],
+    [86399, "23h 59m ago"],
+    [86400, "1d ago"]
+  ]) {
+    assert.equal(Model.staleAgeLabel(seconds), expected)
+  }
 })
 
 test("tooltip makes an all-cancelled result explicit", () => {

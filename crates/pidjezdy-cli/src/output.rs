@@ -138,8 +138,12 @@ fn write_text(
     styled: bool,
 ) -> Result<(), std::io::Error> {
     if stale {
-        let age_minutes = (generated_at - data_updated_at).num_minutes().max(0);
-        writeln!(output, "STALE · data updated {age_minutes} min ago")?;
+        let age_seconds = (generated_at - data_updated_at).num_seconds().max(0);
+        writeln!(
+            output,
+            "STALE · data updated {}",
+            stale_age_label(age_seconds)
+        )?;
     }
     if departures.is_empty() && cancelled.is_empty() {
         return writeln!(output, "No reachable departures.");
@@ -213,6 +217,18 @@ fn write_text(
     Ok(())
 }
 
+fn stale_age_label(age_seconds: i64) -> String {
+    if age_seconds < 60 {
+        "just now".to_owned()
+    } else if age_seconds < 3600 {
+        format!("{} min ago", age_seconds / 60)
+    } else if age_seconds < 86400 {
+        format!("{}h {}m ago", age_seconds / 3600, age_seconds % 3600 / 60)
+    } else {
+        format!("{}d ago", age_seconds / 86400)
+    }
+}
+
 fn cancellation_note(selected: &SelectedDeparture) -> String {
     let departure = &selected.departure;
     format!(
@@ -222,6 +238,17 @@ fn cancellation_note(selected: &SelectedDeparture) -> String {
         selected.boarding_point_name,
         selected.departs_in_minutes()
     )
+}
+
+fn delay_label(delay_seconds: Option<i64>) -> Option<String> {
+    let delay_seconds = delay_seconds?;
+    if delay_seconds >= 60 {
+        Some(format!("+{} late", delay_seconds / 60))
+    } else if delay_seconds <= -60 {
+        Some(format!("-{} early", delay_seconds.unsigned_abs() / 60))
+    } else {
+        None
+    }
 }
 
 struct TextRow<'a> {
@@ -247,12 +274,18 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
             format!("leave in {} min", selected.leave_in_minutes())
         };
 
+        let departs = format!("departs in {} min", selected.departs_in_minutes());
+        let departs = match delay_label(departure.delay_seconds) {
+            Some(delay) => format!("{delay}, {departs}"),
+            None => departs,
+        };
+
         Self {
             line: &departure.line,
             headsign: &departure.headsign,
             boarding: format!("{}{platform}", selected.boarding_point_name),
             leave,
-            departs: format!("departs in {} min", selected.departs_in_minutes()),
+            departs,
         }
     }
 }
@@ -511,6 +544,54 @@ mod tests {
             String::from_utf8(output)
                 .unwrap()
                 .starts_with("STALE · data updated 3 min ago\n")
+        );
+    }
+
+    #[test]
+    fn stale_age_uses_human_scale_boundaries() {
+        for (seconds, expected) in [
+            (0, "just now"),
+            (59, "just now"),
+            (60, "1 min ago"),
+            (3599, "59 min ago"),
+            (3600, "1h 0m ago"),
+            (7800, "2h 10m ago"),
+            (86399, "23h 59m ago"),
+            (86400, "1d ago"),
+        ] {
+            assert_eq!(stale_age_label(seconds), expected);
+        }
+    }
+
+    #[test]
+    fn delay_labels_only_material_late_and_early_running() {
+        for (delay, expected) in [
+            (None, None),
+            (Some(0), None),
+            (Some(59), None),
+            (Some(60), Some("+1 late")),
+            (Some(125), Some("+2 late")),
+            (Some(-59), None),
+            (Some(-60), Some("-1 early")),
+            (Some(-125), Some("-2 early")),
+        ] {
+            assert_eq!(delay_label(delay).as_deref(), expected);
+        }
+    }
+
+    #[test]
+    fn text_output_includes_material_delay_on_the_secondary_line() {
+        let mut departure = selected();
+        departure.departure.delay_seconds = Some(125);
+        let query = departure_query(vec![departure], now(), false);
+        let mut output = Vec::new();
+
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
+
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .contains("+2 late, departs in 10 min")
         );
     }
 }
