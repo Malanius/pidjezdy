@@ -25,6 +25,7 @@ function output(overrides = {}) {
 }
 
 test("settings are parsed and bounded defensively", () => {
+  assert.equal(Model.maxDisplayDepartures, 20)
   assert.equal(Model.refreshInterval(undefined), 60)
   assert.equal(Model.refreshInterval(null), 60)
   assert.equal(Model.refreshInterval(""), 60)

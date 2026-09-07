@@ -4,6 +4,9 @@
 // polls. No Qt imports are used so the behavior stays testable with Node.
 
 var EXPECTED_SCHEMA_VERSION = 1
+// Keep this and manifest.json's limit maximum aligned with
+// pidjezdy_core::config::MAX_DISPLAY_DEPARTURES. CI verifies the contract.
+var MAX_DISPLAY_DEPARTURES = 20
 
 function boundedInteger(value, fallback, minimum, maximum) {
   var numeric = typeof value === "number"
@@ -18,7 +21,7 @@ function refreshInterval(value) {
 }
 
 function departureLimit(value) {
-  return boundedInteger(value, 3, 1, 20)
+  return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
 function nonEmptyString(value) {
@@ -180,6 +183,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     normalizeDeparture: normalizeDeparture,
     parseOutput: parseOutput,
