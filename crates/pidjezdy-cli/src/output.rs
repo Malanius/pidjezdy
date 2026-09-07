@@ -138,8 +138,12 @@ fn write_text(
     styled: bool,
 ) -> Result<(), std::io::Error> {
     if stale {
-        let age_minutes = (generated_at - data_updated_at).num_minutes().max(0);
-        writeln!(output, "STALE · data updated {age_minutes} min ago")?;
+        let age_seconds = (generated_at - data_updated_at).num_seconds().max(0);
+        writeln!(
+            output,
+            "STALE · data updated {}",
+            stale_age_label(age_seconds)
+        )?;
     }
     if departures.is_empty() && cancelled.is_empty() {
         return writeln!(output, "No reachable departures.");
@@ -211,6 +215,18 @@ fn write_text(
         write_styled_line(output, styled, EMPHASIS_STYLE, &note)?;
     }
     Ok(())
+}
+
+fn stale_age_label(age_seconds: i64) -> String {
+    if age_seconds < 60 {
+        "just now".to_owned()
+    } else if age_seconds < 3600 {
+        format!("{} min ago", age_seconds / 60)
+    } else if age_seconds < 86400 {
+        format!("{}h {}m ago", age_seconds / 3600, age_seconds % 3600 / 60)
+    } else {
+        format!("{}d ago", age_seconds / 86400)
+    }
 }
 
 fn cancellation_note(selected: &SelectedDeparture) -> String {
@@ -512,5 +528,21 @@ mod tests {
                 .unwrap()
                 .starts_with("STALE · data updated 3 min ago\n")
         );
+    }
+
+    #[test]
+    fn stale_age_uses_human_scale_boundaries() {
+        for (seconds, expected) in [
+            (0, "just now"),
+            (59, "just now"),
+            (60, "1 min ago"),
+            (3599, "59 min ago"),
+            (3600, "1h 0m ago"),
+            (7800, "2h 10m ago"),
+            (86399, "23h 59m ago"),
+            (86400, "1d ago"),
+        ] {
+            assert_eq!(stale_age_label(seconds), expected);
+        }
     }
 }

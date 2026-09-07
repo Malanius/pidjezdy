@@ -197,10 +197,20 @@ function cancellationLabel(seconds) {
   return "would have departed in " + wholeMinutes(seconds) + " min"
 }
 
+function staleAgeLabel(seconds) {
+  var ageSeconds = Math.floor(Math.max(0, Number(seconds) || 0))
+  if (ageSeconds < 60) return "just now"
+  if (ageSeconds < 3600) return Math.floor(ageSeconds / 60) + " min ago"
+  if (ageSeconds < 86400)
+    return Math.floor(ageSeconds / 3600) + "h "
+      + Math.floor(ageSeconds % 3600 / 60) + "m ago"
+  return Math.floor(ageSeconds / 86400) + "d ago"
+}
+
 function updateLabel(report, nowMs) {
   if (!report || !isFinite(report.dataUpdatedAtMs)) return ""
-  var ageMinutes = wholeMinutes((Number(nowMs) - report.dataUpdatedAtMs) / 1000)
-  return (report.stale ? "STALE · " : "") + "updated " + ageMinutes + " min ago"
+  var ageSeconds = (Number(nowMs) - report.dataUpdatedAtMs) / 1000
+  return (report.stale ? "STALE · " : "") + "updated " + staleAgeLabel(ageSeconds)
 }
 
 function exitError(exitCode) {
@@ -254,6 +264,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
     cancellationLabel: cancellationLabel,
+    staleAgeLabel: staleAgeLabel,
     updateLabel: updateLabel,
     exitError: exitError,
     commandError: commandError,

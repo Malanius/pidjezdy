@@ -183,6 +183,21 @@ test("countdown labels round down conservatively", () => {
   assert.equal(Model.cancellationLabel(659), "would have departed in 10 min")
 })
 
+test("stale age uses human scale boundaries", () => {
+  for (const [seconds, expected] of [
+    [0, "just now"],
+    [59, "just now"],
+    [60, "1 min ago"],
+    [3599, "59 min ago"],
+    [3600, "1h 0m ago"],
+    [7800, "2h 10m ago"],
+    [86399, "23h 59m ago"],
+    [86400, "1d ago"]
+  ]) {
+    assert.equal(Model.staleAgeLabel(seconds), expected)
+  }
+})
+
 test("tooltip makes an all-cancelled result explicit", () => {
   const report = Model.parseOutput(output({
     departures: [],
