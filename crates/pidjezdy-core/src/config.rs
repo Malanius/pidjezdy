@@ -8,6 +8,9 @@ const DEFAULT_MINUTES_AFTER: u32 = 120;
 const DEFAULT_API_LIMIT: usize = 20;
 const DEFAULT_SAFETY_BUFFER_MINUTES: u32 = 2;
 
+/// Upper bound on how many departures may be displayed at once.
+pub const MAX_DISPLAY_DEPARTURES: usize = 20;
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -66,14 +69,16 @@ impl Config {
     fn validate_normalized(&self) -> Result<(), ValidationErrors> {
         let mut errors = Vec::new();
 
-        if !(1..=20).contains(&self.display.max_departures) {
-            errors.push("display.max_departures must be between 1 and 20".into());
+        if !(1..=MAX_DISPLAY_DEPARTURES).contains(&self.display.max_departures) {
+            errors.push(format!(
+                "display.max_departures must be between 1 and {MAX_DISPLAY_DEPARTURES}"
+            ));
         }
         if self.fetch.minutes_after == 0 {
             errors.push("fetch.minutes_after must be greater than 0".into());
         }
-        if !(1..=20).contains(&self.fetch.api_limit) {
-            errors.push("fetch.api_limit must be between 1 and 20".into());
+        if self.fetch.api_limit == 0 {
+            errors.push("fetch.api_limit must be greater than 0".into());
         }
         if self.boarding_points.is_empty() {
             errors.push("at least one boarding point is required".into());
@@ -159,11 +164,11 @@ fn validate_route_quotas(
         if key.1.is_empty() {
             errors.push(format!("{prefix}.headsign must not be empty"));
         }
-        if (1..=20).contains(&quota.minimum_departures) {
+        if (1..=MAX_DISPLAY_DEPARTURES).contains(&quota.minimum_departures) {
             minimum_total = minimum_total.saturating_add(quota.minimum_departures);
         } else {
             errors.push(format!(
-                "{prefix}.minimum_departures must be between 1 and 20"
+                "{prefix}.minimum_departures must be between 1 and {MAX_DISPLAY_DEPARTURES}"
             ));
         }
         if !key.0.is_empty() && !key.1.is_empty() {
@@ -431,7 +436,7 @@ mod tests {
             boarding_points: Vec::new(),
         };
         let errors = config.validate().unwrap_err();
-        assert_eq!(errors.0.len(), 4);
+        assert_eq!(errors.0.len(), 3);
     }
 
     #[test]

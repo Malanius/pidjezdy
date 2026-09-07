@@ -120,7 +120,9 @@ where
     })
 }
 
-fn configured_request(config: &Config) -> Result<DepartureBoardRequest, PidRequestError> {
+pub(crate) fn configured_request(
+    config: &Config,
+) -> Result<DepartureBoardRequest, PidRequestError> {
     let stop_groups = config
         .boarding_points
         .iter()

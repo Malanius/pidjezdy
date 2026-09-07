@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use directories::ProjectDirs;
-use pidjezdy_core::config::{Config, ConfigError};
+use pidjezdy_core::config::{Config, ConfigError, MAX_DISPLAY_DEPARTURES};
 use pidjezdy_pid::DEFAULT_ENDPOINT;
 use thiserror::Error;
 
@@ -15,8 +15,8 @@ mod cache;
 mod departures;
 mod output;
 
-use departures::query_departures;
 pub use departures::{DepartureQueryError, DepartureUnavailable};
+use departures::{configured_request, query_departures};
 pub use output::OutputError;
 use output::{OutputFormat, write_departures, write_json_error};
 
@@ -90,12 +90,12 @@ enum Command {
 }
 
 fn parse_departure_limit(value: &str) -> Result<usize, String> {
-    const ERROR: &str = "limit must be an integer between 1 and 20";
-    let limit = value.parse::<usize>().map_err(|_| ERROR.to_owned())?;
-    if (1..=20).contains(&limit) {
+    let error = || format!("limit must be an integer between 1 and {MAX_DISPLAY_DEPARTURES}");
+    let limit = value.parse::<usize>().map_err(|_| error())?;
+    if (1..=MAX_DISPLAY_DEPARTURES).contains(&limit) {
         Ok(limit)
     } else {
-        Err(ERROR.to_owned())
+        Err(error())
     }
 }
 
@@ -341,7 +341,8 @@ fn run_command(
                 }
                 ConfigCommand::Init => init_config(&path, output),
                 ConfigCommand::Check => {
-                    load_config(&path)?;
+                    let config = load_config(&path)?;
+                    configured_request(&config).map_err(DepartureQueryError::from)?;
                     writeln!(output, "configuration is valid: {}", path.display())
                         .map_err(OutputError::from)?;
                     Ok(())
@@ -425,6 +426,7 @@ fn load_config(path: &Path) -> Result<Config, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pidjezdy_pid::MAX_API_LIMIT;
     use std::ffi::OsString;
 
     #[test]
@@ -503,6 +505,56 @@ mod tests {
                 .unwrap()
                 .contains("configuration is valid")
         );
+    }
+
+    #[test]
+    fn config_check_rejects_limits_above_the_pid_api_cap() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let invalid_limit = MAX_API_LIMIT + 1;
+        fs::write(
+            &path,
+            format!(
+                r#"
+                [fetch]
+                api_limit = {invalid_limit}
+
+                [[boarding_points]]
+                name = "Test stop"
+                stop_ids = ["U100Z1P"]
+                walking_minutes = 1
+
+                [[boarding_points.routes]]
+                line = "123"
+                headsign = "Test destination"
+                "#
+            ),
+        )
+        .unwrap();
+        let cli = Cli::try_parse_from([
+            OsString::from("pidjezdy"),
+            OsString::from("--config"),
+            path.into_os_string(),
+            OsString::from("config"),
+            OsString::from("check"),
+        ])
+        .unwrap();
+        let mut output = Vec::new();
+        let mut diagnostics = Vec::new();
+
+        let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
+        let causes = std::iter::successors(
+            Some(&failure as &(dyn std::error::Error + 'static)),
+            |error| error.source(),
+        )
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+        assert!(output.is_empty());
+        assert!(diagnostics.is_empty());
+        let expected =
+            format!("PID API limit must be between 1 and {MAX_API_LIMIT}, got {invalid_limit}");
+        assert!(causes.iter().any(|cause| cause == &expected), "{causes:?}");
     }
 
     #[test]

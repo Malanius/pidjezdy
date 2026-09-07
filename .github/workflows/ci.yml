@@ -21,11 +21,12 @@ jobs:
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Check plugin and CLI versions match
+      - name: Check plugin and CLI contracts match
         run: |
           node -e '
             const fs = require("fs");
             const childProcess = require("child_process");
+            const model = require("./Model.js");
             const metadata = JSON.parse(childProcess.execFileSync(
               "cargo", ["metadata", "--no-deps", "--format-version", "1"],
               { encoding: "utf8" }
@@ -34,6 +35,18 @@ jobs:
             const plugin = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
             if (!cli || plugin.version !== cli.version) {
               console.error(`plugin version ${plugin.version} does not match CLI version ${cli && cli.version}`);
+              process.exit(1);
+            }
+            const core = fs.readFileSync("crates/pidjezdy-core/src/config.rs", "utf8");
+            const displayLimit = core.match(
+              /pub\s+const\s+MAX_DISPLAY_DEPARTURES\s*:\s*usize\s*=\s*(\d+)\s*;/
+            );
+            const manifestLimit = plugin.barWidget.schema.find(setting => setting.key === "limit");
+            if (!displayLimit
+                || model.maxDisplayDepartures !== Number(displayLimit[1])
+                || !manifestLimit
+                || manifestLimit.max !== Number(displayLimit[1])) {
+              console.error("plugin departure limits do not match MAX_DISPLAY_DEPARTURES");
               process.exit(1);
             }
           '

@@ -3,6 +3,9 @@ use serde_json::json;
 use thiserror::Error;
 use url::Url;
 
+/// Largest per-group result limit accepted by PID's departure-board endpoint.
+pub const MAX_API_LIMIT: usize = 20;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DepartureBoardRequest {
@@ -29,7 +32,7 @@ impl DepartureBoardRequest {
         if minutes_after == 0 {
             return Err(PidRequestError::EmptyTimeWindow);
         }
-        if !(1..=20).contains(&limit) {
+        if !(1..=MAX_API_LIMIT).contains(&limit) {
             return Err(PidRequestError::InvalidLimit(limit));
         }
         let limit = u32::try_from(limit).map_err(|_| PidRequestError::InvalidLimit(limit))?;
@@ -77,7 +80,10 @@ impl DepartureBoardRequest {
 pub enum PidRequestError {
     #[error("minutes_after must be greater than 0")]
     EmptyTimeWindow,
-    #[error("limit must be between 1 and 20, got {0}")]
+    #[error(
+        "PID API limit must be between 1 and {maximum}, got {0}",
+        maximum = MAX_API_LIMIT
+    )]
     InvalidLimit(usize),
     #[error("at least one stop group is required")]
     NoStopGroups,
