@@ -97,6 +97,29 @@ fn current_departures() -> Vec<u8> {
     serde_json::to_vec(&document).unwrap()
 }
 
+fn capped_departures() -> Vec<u8> {
+    let document: serde_json::Value = serde_json::from_slice(DEPARTURES).unwrap();
+    let template = document[0][0].clone();
+    let now = Utc::now();
+    let mut group = Vec::new();
+    for (index, line, minutes) in [(0, "158", 10), (1, "900", 20), (2, "901", 28)] {
+        let mut departure = template.clone();
+        departure["departure"]["timestamp_scheduled"] =
+            json!((now + TimeDelta::minutes(minutes)).to_rfc3339());
+        departure["departure"]["timestamp_predicted"] = serde_json::Value::Null;
+        departure["departure"]["delay_seconds"] = serde_json::Value::Null;
+        departure["route"]["short_name"] = json!(line);
+        departure["trip"]["id"] = json!(format!("trip-{index}"));
+        departure["trip"]["headsign"] = json!(if line == "158" {
+            "Centrum"
+        } else {
+            "Elsewhere"
+        });
+        group.push(departure);
+    }
+    serde_json::to_vec(&json!([group])).unwrap()
+}
+
 fn write_config(root: &Path) -> PathBuf {
     write_config_with_walking_time(root, 4)
 }
@@ -244,6 +267,36 @@ fn text_happy_path_is_aligned_and_unstyled_when_piped() {
     assert!(lines[0].contains("leave in "), "{text}");
     assert!(lines[1].contains("Nearby stop · platform A"), "{text}");
     assert!(lines[1].contains("departs in "), "{text}");
+}
+
+#[test]
+fn short_capped_response_warns_on_stderr() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = write_config_with_api_limit(directory.path(), 3);
+    let server = serve_once(capped_departures());
+
+    let output = command(
+        directory.path(),
+        &config,
+        &server.endpoint,
+        &["departures", "--format", "json"],
+    );
+    server.finish();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["departures"].as_array().unwrap().len(), 1);
+    let diagnostics = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        diagnostics.contains(
+            "pidjezdy: warning: \"Nearby stop\" hit the 3-departure API limit, covering only the next 27 of 120 requested minutes"
+        ),
+        "{diagnostics}"
+    );
 }
 
 #[test]
