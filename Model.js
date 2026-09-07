@@ -3,7 +3,7 @@
 // this adapter validates its JSON envelope and keeps countdowns honest between
 // polls. No Qt imports are used so the behavior stays testable with Node.
 
-var EXPECTED_SCHEMA_VERSION = 1
+var EXPECTED_SCHEMA_VERSION = 2
 // Keep this and manifest.json's limit maximum aligned with
 // pidjezdy_core::config::MAX_DISPLAY_DEPARTURES. CI verifies the contract.
 var MAX_DISPLAY_DEPARTURES = 20
@@ -96,7 +96,7 @@ function parseOutput(raw) {
       }
     }
 
-    if (!Array.isArray(document.departures))
+    if (!Array.isArray(document.departures) || !Array.isArray(document.cancelled))
       return { ok: false, error: "pidjezdy returned an unsupported JSON document" }
     var dataUpdatedAtMs = Date.parse(String(document.data_updated_at || ""))
     if (!isFinite(dataUpdatedAtMs))
@@ -109,12 +109,20 @@ function parseOutput(raw) {
         return { ok: false, error: "pidjezdy returned an unsupported departure record" }
       departures.push(departure)
     }
+    var cancelled = []
+    for (var cancelledIndex = 0; cancelledIndex < document.cancelled.length; cancelledIndex++) {
+      var cancellation = normalizeDeparture(document.cancelled[cancelledIndex])
+      if (!cancellation || document.cancelled[cancelledIndex].departure.is_cancelled !== true)
+        return { ok: false, error: "pidjezdy returned an unsupported cancellation record" }
+      cancelled.push(cancellation)
+    }
     return {
       ok: true,
       generatedAtMs: generatedAtMs,
       dataUpdatedAtMs: dataUpdatedAtMs,
       stale: document.stale === true,
-      departures: departures
+      departures: departures,
+      cancelled: cancelled
     }
   } catch (error) {
     return { ok: false, error: "pidjezdy returned malformed JSON" }
@@ -146,6 +154,26 @@ function currentDepartures(report, nowMs) {
   return current
 }
 
+function currentCancellations(report, nowMs) {
+  if (!report || !Array.isArray(report.cancelled)) return []
+  var elapsed = elapsedSeconds(report, nowMs)
+  var current = []
+  for (var i = 0; i < report.cancelled.length; i++) {
+    var row = report.cancelled[i]
+    var departsSeconds = row.departsSeconds - elapsed
+    if (departsSeconds < 0) continue
+    current.push({
+      line: row.line,
+      headsign: row.headsign,
+      boardingPoint: row.boardingPoint,
+      platform: row.platform,
+      leaveSeconds: row.leaveSeconds - elapsed,
+      departsSeconds: departsSeconds
+    })
+  }
+  return current
+}
+
 function wholeMinutes(seconds) {
   return Math.floor(Math.max(0, Number(seconds) || 0) / 60)
 }
@@ -157,6 +185,10 @@ function leaveLabel(seconds) {
 
 function departureLabel(seconds) {
   return "departs in " + wholeMinutes(seconds) + " min"
+}
+
+function cancellationLabel(seconds) {
+  return "would have departed in " + wholeMinutes(seconds) + " min"
 }
 
 function updateLabel(report, nowMs) {
@@ -180,11 +212,18 @@ function stderrError(stderr, exitCode) {
 
 function tooltip(report, nowMs, errorMessage, loading) {
   var rows = currentDepartures(report, nowMs)
+  var cancellations = currentCancellations(report, nowMs)
   if (rows.length > 0) {
     var first = rows[0]
     var prefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) prefix += "STALE · "
     return prefix + first.line + " → " + first.headsign + " · " + leaveLabel(first.leaveSeconds)
+  }
+  if (cancellations.length > 0) {
+    var cancellation = cancellations[0]
+    var cancellationPrefix = errorMessage ? "⚠ " : ""
+    if (report && report.stale) cancellationPrefix += "STALE · "
+    return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"
@@ -203,9 +242,11 @@ if (typeof module !== "undefined" && module && module.exports) {
     parseOutput: parseOutput,
     elapsedSeconds: elapsedSeconds,
     currentDepartures: currentDepartures,
+    currentCancellations: currentCancellations,
     wholeMinutes: wholeMinutes,
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
+    cancellationLabel: cancellationLabel,
     updateLabel: updateLabel,
     exitError: exitError,
     commandError: commandError,
