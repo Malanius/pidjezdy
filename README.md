@@ -389,6 +389,25 @@ node --test tests/model.test.js
 omarchy plugin validate .
 ```
 
+With [`just`](https://just.systems/) installed, refresh the CLI and its
+user-local Bash completion from the current checkout with:
+
+```console
+just install-local
+```
+
+This force-installs the workspace CLI with Cargo, then atomically replaces
+`${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/pidjezdy`.
+To regenerate only the completion after a CLI change, run:
+
+```console
+just install-bash-completions
+```
+
+Neither recipe changes the pidjezdy configuration or manages the Omarchy
+plugin link. A checkout linked as described below continues to hot-reload
+plugin changes directly.
+
 `PIDJEZDY_ENDPOINT` is a testing aid that redirects departure requests to a
 different HTTP endpoint. An unset or empty value uses the built-in PID
 endpoint. It is intentionally not a normal user setting; the end-to-end suite
