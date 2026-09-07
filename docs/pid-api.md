@@ -77,7 +77,7 @@ Fields consumed by `pidjezdy` are:
 | `route.short_name` | Public line number or name. |
 | `trip.id` | Trip identifier. |
 | `trip.headsign` | Destination/direction label. |
-| `trip.is_canceled` | Cancellation flag, normalized to `is_cancelled`. |
+| `trip.is_canceled` | Cancellation flag, normalized to `is_cancelled`; cancelled records remain otherwise structurally identical to regular departures. |
 | `vehicle` | Nullable vehicle object; `id`, `is_wheelchair_accessible`, `is_air_conditioned`, and `has_charger` are retained when supplied. |
 
 Surrounding whitespace is removed from the textual identifiers, line,

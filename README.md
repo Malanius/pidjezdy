@@ -93,6 +93,8 @@ rendered width. It rounds time down conservatively:
 ────────────────────────────────────────────────
 456  Main station                leave in 7 min
      Other stop · platform C   departs in 15 min
+────────────────────────────────────────────────
+cancelled: 123 → City centre from Nearby stop, would have departed in 12 min
 ```
 
 On an interactive terminal, the line, direction, and leave-by time are
@@ -146,9 +148,13 @@ budget; keep their walking times accurate when doing so.
 
 A departure is reachable when its predicted time, or scheduled time when no
 prediction exists, leaves at least the configured walking time plus safety
-buffer. Cancelled, unmatched, and already-unreachable departures are omitted.
-When the same trip serves multiple configured boarding points, the CLI keeps
-the option that leaves the most time to reach it.
+buffer. Unmatched and already-unreachable departures are omitted. Cancelled
+departures never consume result slots; instead, reachable matching
+cancellations at or before the last displayed departure appear as notes. When
+there are no usable departures, up to the requested limit of reachable
+cancellations is shown so an all-cancelled result is not mistaken for the end
+of service. When the same trip serves multiple configured boarding points,
+the CLI keeps the option that leaves the most time to reach it.
 
 For scripts and the future Omarchy plugin, request JSON instead of parsing the
 human-readable text:
@@ -161,21 +167,23 @@ Successful JSON output has this envelope:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-09-05T08:00:00Z",
   "data_updated_at": "2026-09-05T07:59:30Z",
   "stale": false,
-  "departures": []
+  "departures": [],
+  "cancelled": []
 }
 ```
 
+`departures` and `cancelled` use the same selected-departure record shape.
 Relative departure times are included as exact seconds so consumers do not
 need to infer them from rounded labels. When the command fails after accepting
 `--format json`, it writes one error document to stdout and exits non-zero:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-09-05T08:00:00Z",
   "error": {
     "kind": "departures_unavailable",
@@ -193,8 +201,9 @@ detailed over time and should not be parsed for control flow. Errors that
 prevent writing stdout itself cannot produce a JSON document.
 
 Consumers must require the supported `schema_version`. The version is bumped
-when a field is removed, renamed, retyped, or changes meaning without changing
-its name. Purely additive fields do not require a bump.
+when the required envelope shape changes, or when a field is removed, renamed,
+retyped, or changes meaning without changing its name. Schema v2 added the
+required `cancelled` array.
 
 ## Shell completions
 
@@ -295,7 +304,8 @@ configured stop IDs are omitted from the default report.
 ## Omarchy plugin
 
 The repository is also an Omarchy `bar-widget` plugin. Its bus icon opens a
-native popup containing the closest reachable departures selected by the CLI.
+native popup containing the closest reachable departures selected by the CLI,
+followed by relevant cancellation notes.
 It defaults to the right side of the bar, polls once per minute, and requests
 three departures so the popup remains compact. The plugin does not run a
 daemon or access PID directly.
@@ -329,9 +339,10 @@ omarchy bar move malanius.pidjezdy --section right
 Left-click the icon to toggle the popup. Middle-click, `Enter`, or `r` refreshes
 immediately; `Esc` closes it. The popup advances the CLI's exact countdowns
 between polls and removes a departure as soon as its leave-by time passes, so
-the displayed minutes never overpromise. Failed refreshes retain the previous
-successful result but label the failure, while cached CLI results keep their
-`STALE` label.
+the displayed minutes never overpromise. Cancellation notes remain until their
+would-be departure time; an all-cancelled result is also called out in the icon
+tooltip. Failed refreshes retain the previous successful result but label the
+failure, while cached CLI results keep their `STALE` label.
 
 The plugin exposes three Omarchy settings:
 
