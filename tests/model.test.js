@@ -39,6 +39,10 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.departureLimit(""), 3)
   assert.equal(Model.departureLimit({}), 3)
   assert.equal(Model.departureLimit(50), 20)
+  assert.equal(Model.binaryPath(undefined), "pidjezdy")
+  assert.equal(Model.binaryPath(""), "pidjezdy")
+  assert.equal(Model.binaryPath("  "), "pidjezdy")
+  assert.equal(Model.binaryPath(" /opt/pidjezdy/bin/pidjezdy "), "/opt/pidjezdy/bin/pidjezdy")
 })
 
 test("exit errors provide a fallback when no JSON document is available", () => {

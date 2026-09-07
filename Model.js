@@ -24,6 +24,10 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
+function binaryPath(value) {
+  return nonEmptyString(value) || "pidjezdy"
+}
+
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : ""
 }
@@ -183,6 +187,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    binaryPath: binaryPath,
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     normalizeDeparture: normalizeDeparture,

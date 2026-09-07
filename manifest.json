@@ -17,10 +17,17 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
+      "binaryPath": "pidjezdy",
       "refreshIntervalSec": 60,
       "limit": 3
     },
     "schema": [
+      {
+        "key": "binaryPath",
+        "type": "string",
+        "label": "pidjezdy binary",
+        "defaultValue": "pidjezdy"
+      },
       {
         "key": "refreshIntervalSec",
         "type": "integer",
