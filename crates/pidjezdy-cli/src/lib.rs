@@ -426,6 +426,7 @@ fn load_config(path: &Path) -> Result<Config, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pidjezdy_pid::MAX_API_LIMIT;
     use std::ffi::OsString;
 
     #[test]
@@ -510,9 +511,24 @@ mod tests {
     fn config_check_rejects_limits_above_the_pid_api_cap() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.toml");
+        let invalid_limit = MAX_API_LIMIT + 1;
         fs::write(
             &path,
-            DEFAULT_CONFIG_TEMPLATE.replace("api_limit = 20", "api_limit = 21"),
+            format!(
+                r#"
+                [fetch]
+                api_limit = {invalid_limit}
+
+                [[boarding_points]]
+                name = "Test stop"
+                stop_ids = ["U100Z1P"]
+                walking_minutes = 1
+
+                [[boarding_points.routes]]
+                line = "123"
+                headsign = "Test destination"
+                "#
+            ),
         )
         .unwrap();
         let cli = Cli::try_parse_from([
@@ -536,12 +552,9 @@ mod tests {
 
         assert!(output.is_empty());
         assert!(diagnostics.is_empty());
-        assert!(
-            causes
-                .iter()
-                .any(|cause| cause == "PID API limit must be between 1 and 20, got 21"),
-            "{causes:?}"
-        );
+        let expected =
+            format!("PID API limit must be between 1 and {MAX_API_LIMIT}, got {invalid_limit}");
+        assert!(causes.iter().any(|cause| cause == &expected), "{causes:?}");
     }
 
     #[test]

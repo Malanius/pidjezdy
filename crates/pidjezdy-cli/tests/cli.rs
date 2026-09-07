@@ -8,6 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use chrono::{TimeDelta, Utc};
+use pidjezdy_pid::MAX_API_LIMIT;
 use serde_json::json;
 
 const DEPARTURES: &[u8] = include_bytes!("../../pidjezdy-pid/fixtures/departures.json");
@@ -101,6 +102,14 @@ fn write_config(root: &Path) -> PathBuf {
 }
 
 fn write_config_with_walking_time(root: &Path, walking_minutes: u32) -> PathBuf {
+    write_config_with(root, walking_minutes, MAX_API_LIMIT)
+}
+
+fn write_config_with_api_limit(root: &Path, api_limit: usize) -> PathBuf {
+    write_config_with(root, 4, api_limit)
+}
+
+fn write_config_with(root: &Path, walking_minutes: u32, api_limit: usize) -> PathBuf {
     let path = root.join("config.toml");
     fs::write(
         &path,
@@ -111,7 +120,7 @@ fn write_config_with_walking_time(root: &Path, walking_minutes: u32) -> PathBuf 
 
             [fetch]
             minutes_after = 120
-            api_limit = 20
+            api_limit = {api_limit}
 
             [[boarding_points]]
             name = "Nearby stop"
@@ -424,12 +433,8 @@ fn invalid_configuration_lists_validation_errors() {
 #[test]
 fn config_check_rejects_a_limit_above_the_pid_api_cap() {
     let directory = tempfile::tempdir().unwrap();
-    let config = directory.path().join("config.toml");
-    fs::write(
-        &config,
-        pidjezdy::DEFAULT_CONFIG_TEMPLATE.replace("api_limit = 20", "api_limit = 21"),
-    )
-    .unwrap();
+    let invalid_limit = MAX_API_LIMIT + 1;
+    let config = write_config_with_api_limit(directory.path(), invalid_limit);
     let output = isolated_command(directory.path())
         .arg("--config")
         .arg(config)
@@ -445,7 +450,9 @@ fn config_check_rejects_a_limit_above_the_pid_api_cap() {
         "{diagnostics}"
     );
     assert!(
-        diagnostics.contains("PID API limit must be between 1 and 20, got 21"),
+        diagnostics.contains(&format!(
+            "PID API limit must be between 1 and {MAX_API_LIMIT}, got {invalid_limit}"
+        )),
         "{diagnostics}"
     );
 }
