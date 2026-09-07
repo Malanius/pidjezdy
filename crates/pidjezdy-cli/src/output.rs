@@ -11,7 +11,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::AppError;
 use crate::departures::DepartureQuery;
 
-pub(crate) const JSON_SCHEMA_VERSION: u32 = 1;
+pub(crate) const JSON_SCHEMA_VERSION: u32 = 2;
 
 const LINE_STYLE: &str = "\x1b[1;36m";
 const EMPHASIS_STYLE: &str = "\x1b[1m";
@@ -40,6 +40,7 @@ struct JsonOutput<'a> {
     data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &'a [SelectedDeparture],
+    cancelled: &'a [SelectedDeparture],
 }
 
 #[derive(Serialize)]
@@ -75,6 +76,7 @@ pub(crate) fn write_departures(
                 query.data_updated_at,
                 query.stale,
                 &query.departures,
+                &query.cancelled,
                 styled_text,
             )?;
         }
@@ -85,6 +87,7 @@ pub(crate) fn write_departures(
                 data_updated_at: query.data_updated_at,
                 stale: query.stale,
                 departures: &query.departures,
+                cancelled: &query.cancelled,
             })?;
             writeln!(output, "{document}")?;
         }
@@ -131,13 +134,14 @@ fn write_text(
     data_updated_at: DateTime<Utc>,
     stale: bool,
     departures: &[SelectedDeparture],
+    cancelled: &[SelectedDeparture],
     styled: bool,
 ) -> Result<(), std::io::Error> {
     if stale {
         let age_minutes = (generated_at - data_updated_at).num_minutes().max(0);
         writeln!(output, "STALE · data updated {age_minutes} min ago")?;
     }
-    if departures.is_empty() {
+    if departures.is_empty() && cancelled.is_empty() {
         return writeln!(output, "No reachable departures.");
     }
 
@@ -153,7 +157,9 @@ fn write_text(
         .flat_map(|row| [row.leave.width(), row.departs.width()])
         .max()
         .unwrap_or(0);
-    let separator = "─".repeat(line_width + detail_width + time_width + 4);
+    let cancellation_notes = cancelled.iter().map(cancellation_note).collect::<Vec<_>>();
+    let departure_width = line_width + detail_width + time_width + 4;
+    let separator = "─".repeat(departure_width);
 
     for (index, row) in rows.iter().enumerate() {
         if index > 0 {
@@ -197,7 +203,25 @@ fn write_text(
         write_style(output, styled, RESET_STYLE)?;
         writeln!(output)?;
     }
+
+    if !rows.is_empty() && !cancellation_notes.is_empty() {
+        write_styled_line(output, styled, DIM_STYLE, &separator)?;
+    }
+    for note in cancellation_notes {
+        write_styled_line(output, styled, EMPHASIS_STYLE, &note)?;
+    }
     Ok(())
+}
+
+fn cancellation_note(selected: &SelectedDeparture) -> String {
+    let departure = &selected.departure;
+    format!(
+        "cancelled: {} → {} from {}, would have departed in {} min",
+        departure.line,
+        departure.headsign,
+        selected.boarding_point_name,
+        selected.departs_in_minutes()
+    )
 }
 
 struct TextRow<'a> {
@@ -339,6 +363,7 @@ mod tests {
             data_updated_at,
             stale,
             departures,
+            cancelled: Vec::new(),
             warnings: Vec::new(),
         }
     }
@@ -369,6 +394,41 @@ mod tests {
         let lines = output.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 5);
         assert_eq!(lines[2], "─".repeat(lines[0].width()));
+    }
+
+    #[test]
+    fn text_output_appends_cancellations_without_using_departure_slots() {
+        let mut cancelled = selected();
+        cancelled.departure.is_cancelled = true;
+        let mut query = departure_query(vec![selected()], now(), false);
+        query.cancelled.push(cancelled);
+        let mut output = Vec::new();
+
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        let lines = output.lines().collect::<Vec<_>>();
+        assert_eq!(lines[2], "─".repeat(lines[0].width()));
+        assert_eq!(
+            lines[3],
+            "cancelled: 158 → Centre from Nearby stop, would have departed in 10 min"
+        );
+    }
+
+    #[test]
+    fn text_output_explains_an_all_cancelled_result() {
+        let mut cancelled = selected();
+        cancelled.departure.is_cancelled = true;
+        let mut query = departure_query(Vec::new(), now(), false);
+        query.cancelled.push(cancelled);
+        let mut output = Vec::new();
+
+        write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "cancelled: 158 → Centre from Nearby stop, would have departed in 10 min\n"
+        );
     }
 
     #[test]
@@ -422,6 +482,23 @@ mod tests {
         assert_eq!(json["stale"], true);
         assert_eq!(json["departures"][0]["departure"]["line"], "158");
         assert_eq!(json["departures"][0]["leave_in_seconds"], 270);
+        assert_eq!(json["cancelled"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn json_output_includes_cancelled_departures() {
+        let mut cancelled = selected();
+        cancelled.departure.is_cancelled = true;
+        let mut query = departure_query(Vec::new(), now(), false);
+        query.cancelled.push(cancelled);
+        let mut output = Vec::new();
+
+        write_departures(&mut output, OutputFormat::Json, &query, false).unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
+
+        assert_eq!(json["schema_version"], 2);
+        assert_eq!(json["departures"], serde_json::json!([]));
+        assert_eq!(json["cancelled"][0]["departure"]["is_cancelled"], true);
     }
 
     #[test]
