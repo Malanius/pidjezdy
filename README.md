@@ -333,8 +333,11 @@ the displayed minutes never overpromise. Failed refreshes retain the previous
 successful result but label the failure, while cached CLI results keep their
 `STALE` label.
 
-The plugin exposes two Omarchy settings:
+The plugin exposes three Omarchy settings:
 
+- `binaryPath`: executable name or absolute path used to start the CLI;
+  defaults to `pidjezdy`. Set this explicitly when the compositor's `PATH`
+  does not include the installation directory, such as `~/.cargo/bin`.
 - `refreshIntervalSec`: polling interval from 30 to 3600 seconds; defaults to
   60.
 - `limit`: hard CLI result limit from 1 to 20; defaults to 3. Route quota slots
@@ -344,6 +347,7 @@ They can be changed through Omarchy's plugin settings UI or from the command
 line:
 
 ```bash
+omarchy bar set malanius.pidjezdy binaryPath "$HOME/.cargo/bin/pidjezdy"
 omarchy bar set malanius.pidjezdy refreshIntervalSec 60
 omarchy bar set malanius.pidjezdy limit 3
 ```

@@ -21,12 +21,14 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.45)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property string binaryPath: Model.binaryPath(setting("binaryPath", "pidjezdy"))
   readonly property int refreshIntervalSec: Model.refreshInterval(setting("refreshIntervalSec", 60))
   readonly property int requestedLimit: Model.departureLimit(setting("limit", 3))
 
   property bool ready: false
   property bool refreshQueued: false
   property string stdoutText: ""
+  property string stderrText: ""
   property string errorMessage: ""
   property var report: null
   property double nowMs: Date.now()
@@ -46,8 +48,9 @@ Panel {
       return
     }
     stdoutText = ""
+    stderrText = ""
     queryProcess.command = [
-      "pidjezdy", "departures",
+      root.binaryPath, "departures",
       "--limit", String(requestedLimit),
       "--format", "json"
     ]
@@ -64,7 +67,9 @@ Panel {
     } else if (parsed.commandError === true) {
       errorMessage = parsed.error
     } else if (exitCode !== 0 && String(stdoutText || "").trim() === "") {
-      errorMessage = Model.exitError(exitCode)
+      errorMessage = String(stderrText || "").trim() === ""
+        ? Model.commandError(root.binaryPath)
+        : Model.stderrError(stderrText, exitCode)
     } else {
       errorMessage = parsed.ok ? Model.exitError(exitCode) : parsed.error
     }
@@ -87,6 +92,7 @@ Panel {
 
   onRefreshIntervalSecChanged: if (ready) refreshTimer.restart()
   onRequestedLimitChanged: if (ready) refreshDebounce.restart()
+  onBinaryPathChanged: if (ready) refreshDebounce.restart()
 
   Component.onCompleted: {
     ready = true
@@ -129,6 +135,11 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.stdoutText = text
+    }
+
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.stderrText = text
     }
   }
 

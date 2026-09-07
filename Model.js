@@ -24,6 +24,10 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
+function binaryPath(value) {
+  return nonEmptyString(value) || "pidjezdy"
+}
+
 function nonEmptyString(value) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : ""
 }
@@ -165,6 +169,15 @@ function exitError(exitCode) {
   return "pidjezdy exited with status " + exitCode
 }
 
+function commandError(binaryPath) {
+  return "could not run " + binaryPath + " — check the plugin's binary path setting"
+}
+
+function stderrError(stderr, exitCode) {
+  var diagnostic = nonEmptyString(stderr).split(/\r?\n/)[0]
+  return diagnostic || exitError(exitCode)
+}
+
 function tooltip(report, nowMs, errorMessage, loading) {
   var rows = currentDepartures(report, nowMs)
   if (rows.length > 0) {
@@ -183,6 +196,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    binaryPath: binaryPath,
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     normalizeDeparture: normalizeDeparture,
@@ -194,6 +208,8 @@ if (typeof module !== "undefined" && module && module.exports) {
     departureLabel: departureLabel,
     updateLabel: updateLabel,
     exitError: exitError,
+    commandError: commandError,
+    stderrError: stderrError,
     tooltip: tooltip
   }
 }
