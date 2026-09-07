@@ -78,7 +78,14 @@ test("parseOutput rejects malformed envelopes and records", () => {
   assert.equal(Model.parseOutput("{}").ok, false)
   assert.equal(Model.parseOutput(output({ generated_at: "never" })).ok, false)
   assert.equal(Model.parseOutput(output({ departures: [{}] })).ok, false)
-  assert.equal(Model.parseOutput(output({ cancelled: [{}] })).ok, false)
+  assert.equal(
+    Model.parseOutput(output({ cancelled: [{}] })).error,
+    "pidjezdy returned an unsupported cancellation record"
+  )
+  assert.equal(
+    Model.parseOutput(output({ cancelled: [{ departure: null }] })).error,
+    "pidjezdy returned an unsupported cancellation record"
+  )
 })
 
 test("parseOutput requires the matching envelope version", () => {

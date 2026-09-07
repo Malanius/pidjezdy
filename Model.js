@@ -57,6 +57,12 @@ function normalizeDeparture(value) {
   }
 }
 
+function normalizeCancellation(value) {
+  if (!value || typeof value !== "object" || !value.departure
+      || value.departure.is_cancelled !== true) return null
+  return normalizeDeparture(value)
+}
+
 function parseOutput(raw) {
   try {
     var document = JSON.parse(String(raw || ""))
@@ -111,8 +117,8 @@ function parseOutput(raw) {
     }
     var cancelled = []
     for (var cancelledIndex = 0; cancelledIndex < document.cancelled.length; cancelledIndex++) {
-      var cancellation = normalizeDeparture(document.cancelled[cancelledIndex])
-      if (!cancellation || document.cancelled[cancelledIndex].departure.is_cancelled !== true)
+      var cancellation = normalizeCancellation(document.cancelled[cancelledIndex])
+      if (!cancellation)
         return { ok: false, error: "pidjezdy returned an unsupported cancellation record" }
       cancelled.push(cancellation)
     }
@@ -239,6 +245,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
     normalizeDeparture: normalizeDeparture,
+    normalizeCancellation: normalizeCancellation,
     parseOutput: parseOutput,
     elapsedSeconds: elapsedSeconds,
     currentDepartures: currentDepartures,
