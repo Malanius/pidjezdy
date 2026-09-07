@@ -36,6 +36,13 @@ impl SelectedDeparture {
     }
 }
 
+/// Catchable departures and relevant cancellation notes for one query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    pub departures: Vec<SelectedDeparture>,
+    pub cancelled: Vec<SelectedDeparture>,
+}
+
 #[derive(Debug)]
 struct Candidate {
     selected: SelectedDeparture,
@@ -70,7 +77,7 @@ pub fn select_departures(
     departures: &[Departure],
     now: DateTime<Utc>,
     options: SelectionOptions,
-) -> Vec<SelectedDeparture> {
+) -> Selection {
     let candidates = departures
         .iter()
         .filter(|departure| !departure.is_cancelled)
@@ -81,6 +88,47 @@ pub fn select_departures(
         .filter(|candidate| options.include_unreachable || candidate.selected.reachable)
         .collect::<Vec<_>>();
 
+    let mut deduplicated = deduplicate_candidates(candidates);
+    deduplicated.sort_by_key(Candidate::ranking_key);
+
+    let selected_indices = select_candidate_indices(config, &deduplicated, options.limit);
+    let selected = deduplicated
+        .into_iter()
+        .zip(selected_indices)
+        .filter_map(|(candidate, keep)| keep.then_some(candidate.selected))
+        .collect::<Vec<_>>();
+    let upper_bound = selected
+        .last()
+        .map(|selected| selected.departure.effective_at());
+
+    let cancelled_candidates = departures
+        .iter()
+        .filter(|departure| departure.is_cancelled)
+        .filter_map(|departure| matching_point(config, departure).map(|entry| (departure, entry)))
+        .map(|(departure, (point, configuration_order))| {
+            candidate(departure, point, configuration_order, now)
+        })
+        .filter(|candidate| candidate.selected.reachable)
+        .filter(|candidate| {
+            upper_bound.is_none_or(|bound| candidate.selected.departure.effective_at() <= bound)
+        })
+        .collect::<Vec<_>>();
+    let mut cancelled = deduplicate_candidates(cancelled_candidates);
+    cancelled.sort_by_key(Candidate::ranking_key);
+    if upper_bound.is_none() {
+        cancelled.truncate(options.limit);
+    }
+
+    Selection {
+        departures: selected,
+        cancelled: cancelled
+            .into_iter()
+            .map(|candidate| candidate.selected)
+            .collect(),
+    }
+}
+
+fn deduplicate_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
     let mut deduplicated: Vec<Candidate> = Vec::new();
     for candidate in candidates {
         let trip_id = &candidate.selected.departure.trip_id;
@@ -96,15 +144,7 @@ pub fn select_departures(
         }
         deduplicated.push(candidate);
     }
-
-    deduplicated.sort_by_key(Candidate::ranking_key);
-
-    let selected = select_candidate_indices(config, &deduplicated, options.limit);
     deduplicated
-        .into_iter()
-        .zip(selected)
-        .filter_map(|(candidate, keep)| keep.then_some(candidate.selected))
-        .collect()
 }
 
 fn select_candidate_indices(config: &Config, candidates: &[Candidate], limit: usize) -> Vec<bool> {
@@ -292,13 +332,13 @@ mod tests {
             now(),
             options(3),
         );
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].leave_in_seconds, 0);
-        assert!(selected[0].reachable);
+        assert_eq!(selected.departures.len(), 1);
+        assert_eq!(selected.departures[0].leave_in_seconds, 0);
+        assert!(selected.departures[0].reachable);
     }
 
     #[test]
-    fn filters_unreachable_cancelled_and_unconfigured_departures() {
+    fn separates_relevant_cancellations_and_filters_unconfigured_departures() {
         let config = config(vec![point("Near", "U1", 4)]);
         let mut cancelled = departure("cancelled", "U1", 10);
         cancelled.is_cancelled = true;
@@ -313,8 +353,63 @@ mod tests {
         ];
 
         let selected = select_departures(&config, &departures, now(), options(3));
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].departure.trip_id, "wanted");
+        assert_eq!(selected.departures.len(), 1);
+        assert_eq!(selected.departures[0].departure.trip_id, "wanted");
+        assert_eq!(selected.cancelled.len(), 1);
+        assert_eq!(selected.cancelled[0].departure.trip_id, "cancelled");
+    }
+
+    #[test]
+    fn cancellations_do_not_consume_slots_and_stop_at_the_display_window() {
+        let configured = config(vec![point("Near", "U1", 4)]);
+        let mut inside_window = departure("cancelled-inside", "U1", 20);
+        inside_window.is_cancelled = true;
+        let mut outside_window = departure("cancelled-outside", "U1", 31);
+        outside_window.is_cancelled = true;
+        let selection = select_departures(
+            &configured,
+            &[
+                departure("first", "U1", 10),
+                inside_window,
+                departure("second", "U1", 30),
+                outside_window,
+            ],
+            now(),
+            options(2),
+        );
+
+        assert_eq!(trip_ids(&selection.departures), ["first", "second"]);
+        assert_eq!(trip_ids(&selection.cancelled), ["cancelled-inside"]);
+    }
+
+    #[test]
+    fn all_cancelled_results_are_explicit_and_capped_at_the_limit() {
+        let configured = config(vec![point("Near", "U1", 4)]);
+        let mut departures = [
+            departure("first", "U1", 10),
+            departure("second", "U1", 20),
+            departure("third", "U1", 30),
+        ];
+        for departure in &mut departures {
+            departure.is_cancelled = true;
+        }
+
+        let selection = select_departures(&configured, &departures, now(), options(2));
+
+        assert!(selection.departures.is_empty());
+        assert_eq!(trip_ids(&selection.cancelled), ["first", "second"]);
+    }
+
+    #[test]
+    fn unreachable_cancellations_are_not_reported() {
+        let configured = config(vec![point("Near", "U1", 4)]);
+        let mut cancelled = departure("too-soon", "U1", 5);
+        cancelled.is_cancelled = true;
+
+        let selection = select_departures(&configured, &[cancelled], now(), options(3));
+
+        assert!(selection.departures.is_empty());
+        assert!(selection.cancelled.is_empty());
     }
 
     #[test]
@@ -328,9 +423,9 @@ mod tests {
                 include_unreachable: true,
             },
         );
-        assert_eq!(selected.len(), 1);
-        assert!(!selected[0].reachable);
-        assert_eq!(selected[0].leave_in_seconds, -60);
+        assert_eq!(selected.departures.len(), 1);
+        assert!(!selected.departures[0].reachable);
+        assert_eq!(selected.departures[0].leave_in_seconds, -60);
     }
 
     #[test]
@@ -344,8 +439,8 @@ mod tests {
             now(),
             options(3),
         );
-        assert_eq!(selected[0].departs_in_seconds, 8 * 60);
-        assert_eq!(selected[0].leave_in_seconds, 2 * 60);
+        assert_eq!(selected.departures[0].departs_in_seconds, 8 * 60);
+        assert_eq!(selected.departures[0].leave_in_seconds, 2 * 60);
     }
 
     #[test]
@@ -357,9 +452,9 @@ mod tests {
         ];
 
         let selected = select_departures(&config, &departures, now(), options(3));
-        assert_eq!(selected.len(), 1);
-        assert_eq!(selected[0].boarding_point_name, "Near");
-        assert_eq!(selected[0].leave_in_seconds, 4 * 60);
+        assert_eq!(selected.departures.len(), 1);
+        assert_eq!(selected.departures[0].boarding_point_name, "Near");
+        assert_eq!(selected.departures[0].leave_in_seconds, 4 * 60);
     }
 
     #[test]
@@ -371,7 +466,7 @@ mod tests {
         ];
 
         let selected = select_departures(&configured, &departures, now(), options(3));
-        assert_eq!(selected[0].boarding_point_name, "First");
+        assert_eq!(selected.departures[0].boarding_point_name, "First");
 
         let equal_points = config(vec![point("First", "U1", 4), point("Second", "U2", 4)]);
         let same_time = [
@@ -379,7 +474,7 @@ mod tests {
             departure("same-trip", "U1", 12),
         ];
         let selected = select_departures(&equal_points, &same_time, now(), options(3));
-        assert_eq!(selected[0].boarding_point_name, "First");
+        assert_eq!(selected.departures[0].boarding_point_name, "First");
     }
 
     #[test]
@@ -390,7 +485,7 @@ mod tests {
             now(),
             options(3),
         );
-        assert_eq!(selected.len(), 2);
+        assert_eq!(selected.departures.len(), 2);
     }
 
     #[test]
@@ -407,6 +502,7 @@ mod tests {
         );
         assert_eq!(
             selected
+                .departures
                 .iter()
                 .map(|item| item.departure.trip_id.as_str())
                 .collect::<Vec<_>>(),
@@ -449,6 +545,7 @@ mod tests {
         let selected = select_departures(&configured, &departures, now(), options(4));
         assert_eq!(
             selected
+                .departures
                 .iter()
                 .map(|item| item.departure.trip_id.as_str())
                 .collect::<Vec<_>>(),
@@ -498,6 +595,7 @@ mod tests {
         let selected = select_departures(&configured, &departures, now(), options(3));
         assert_eq!(
             selected
+                .departures
                 .iter()
                 .map(|item| item.departure.trip_id.as_str())
                 .collect::<Vec<_>>(),
@@ -519,7 +617,7 @@ mod tests {
         let selected = select_departures(&configured, &departures, now(), options(4));
 
         assert_eq!(
-            trip_ids(&selected),
+            trip_ids(&selected.departures),
             ["158-1", "unreserved", "195-1", "195-2"]
         );
     }
@@ -540,7 +638,7 @@ mod tests {
 
         let selected = select_departures(&configured, &departures, now(), options(2));
 
-        assert_eq!(trip_ids(&selected), ["158-1", "195-1"]);
+        assert_eq!(trip_ids(&selected.departures), ["158-1", "195-1"]);
     }
 
     #[test]
@@ -556,7 +654,10 @@ mod tests {
 
         let selected = select_departures(&configured, &departures, now(), options(3));
 
-        assert_eq!(trip_ids(&selected), ["158-1", "unreserved", "158-2"]);
+        assert_eq!(
+            trip_ids(&selected.departures),
+            ["158-1", "unreserved", "158-2"]
+        );
     }
 
     fn quota_config(max_departures: usize) -> Config {
