@@ -339,7 +339,7 @@ mod tests {
             data_updated_at,
             stale,
             departures,
-            cache_warning: None,
+            warnings: Vec::new(),
         }
     }
 
