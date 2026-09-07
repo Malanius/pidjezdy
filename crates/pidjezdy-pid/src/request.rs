@@ -80,7 +80,10 @@ impl DepartureBoardRequest {
 pub enum PidRequestError {
     #[error("minutes_after must be greater than 0")]
     EmptyTimeWindow,
-    #[error("PID API limit must be between 1 and 20, got {0}")]
+    #[error(
+        "PID API limit must be between 1 and {maximum}, got {0}",
+        maximum = MAX_API_LIMIT
+    )]
     InvalidLimit(usize),
     #[error("at least one stop group is required")]
     NoStopGroups,
