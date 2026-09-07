@@ -103,6 +103,12 @@ automatically omitted when output is redirected or piped, and can also be
 disabled by setting [`NO_COLOR`](https://no-color.org/). JSON output never
 contains terminal styling.
 
+Known delays of at least 60 seconds are shown in whole minutes before the
+departure countdown, for example `+2 late, departs in 10 min`. Trips running
+early by at least 60 seconds are shown as `-N early`; smaller differences and
+departures without delay information are left unmarked. The departure and
+leave-by countdowns already use the predicted time when present.
+
 The selector first reserves up to each route's configured minimum, when that
 many matching departures are available, and then fills unused result slots
 with the nearest departures overall. A quota matches the normalized `line` and
@@ -286,8 +292,11 @@ rules are reapplied when it is read.
 Cached output is always labeled. Text output starts with a line such as:
 
 ```text
-STALE · data updated 3 min ago
+STALE · data updated 2h 10m ago
 ```
+
+Stale ages read `just now` below one minute, use minutes below one hour, hours
+and minutes below one day, and whole days thereafter.
 
 JSON sets `stale` to `true`, preserves the original fetch time in
 `data_updated_at`, and uses the current processing time for `generated_at`.
@@ -339,10 +348,11 @@ omarchy bar move malanius.pidjezdy --section right
 Left-click the icon to toggle the popup. Middle-click, `Enter`, or `r` refreshes
 immediately; `Esc` closes it. The popup advances the CLI's exact countdowns
 between polls and removes a departure as soon as its leave-by time passes, so
-the displayed minutes never overpromise. Cancellation notes remain until their
+the displayed minutes never overpromise. Material late or early running is
+shown beside the departure countdown. Cancellation notes remain until their
 would-be departure time; an all-cancelled result is also called out in the icon
 tooltip. Failed refreshes retain the previous successful result but label the
-failure, while cached CLI results keep their `STALE` label.
+failure, while cached CLI results keep their `STALE` label and humanised age.
 
 The plugin exposes three Omarchy settings:
 
