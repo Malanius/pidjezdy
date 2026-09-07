@@ -35,6 +35,7 @@ Panel {
   property double lastAttemptMs: 0
 
   readonly property var departures: Model.currentDepartures(report, nowMs)
+  readonly property var cancellations: Model.currentCancellations(report, nowMs)
   readonly property bool stale: report ? report.stale === true : false
   readonly property bool loading: queryProcess.running
 
@@ -157,6 +158,7 @@ Panel {
         stale: root.stale,
         error: root.errorMessage,
         departures: root.departures.length,
+        cancelled: root.cancellations.length,
         updated: Model.updateLabel(root.report, root.nowMs)
       })
     }
@@ -167,7 +169,7 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: root.glyph
-    active: root.stale || root.errorMessage !== ""
+    active: root.stale || root.errorMessage !== "" || root.cancellations.length > 0
     tooltipText: Model.tooltip(root.report, root.nowMs, root.errorMessage, root.loading)
 
     onPressed: function(buttonCode) {
@@ -224,7 +226,9 @@ Panel {
             width: parent.width
             title: "PID Departures"
             meta: root.loading && !root.report ? "Updating" : Model.updateLabel(root.report, root.nowMs)
-            detail: String(root.departures.length)
+            detail: root.cancellations.length > 0
+              ? root.departures.length + " · " + root.cancellations.length + " cancelled"
+              : String(root.departures.length)
             foreground: root.foreground
             fontFamily: root.fontFamily
 
@@ -260,7 +264,8 @@ Panel {
           }
 
           Text {
-            visible: !root.loading && root.errorMessage === "" && root.departures.length === 0
+            visible: !root.loading && root.errorMessage === ""
+              && root.departures.length === 0 && root.cancellations.length === 0
             width: parent.width
             topPadding: Style.space(20)
             bottomPadding: Style.space(20)
@@ -348,6 +353,48 @@ Panel {
                     horizontalAlignment: Text.AlignRight
                     Layout.alignment: Qt.AlignRight
                   }
+                }
+              }
+            }
+          }
+
+          Repeater {
+            model: root.cancellations
+
+            BorderSurface {
+              required property var modelData
+              width: panelColumn.width
+              implicitHeight: cancellationColumn.implicitHeight + Style.space(20)
+              color: Qt.rgba(root.urgent.r, root.urgent.g, root.urgent.b, 0.10)
+              borderSpec: Border.flat(Qt.rgba(root.urgent.r, root.urgent.g, root.urgent.b, 0.35), 1)
+              radius: Style.cornerRadius
+
+              Column {
+                id: cancellationColumn
+                anchors.fill: parent
+                anchors.margins: Style.space(10)
+                spacing: Style.space(2)
+
+                Text {
+                  width: parent.width
+                  textFormat: Text.PlainText
+                  text: "Cancelled · " + modelData.line + " → " + modelData.headsign
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                  elide: Text.ElideRight
+                }
+
+                Text {
+                  width: parent.width
+                  textFormat: Text.PlainText
+                  text: modelData.boardingPoint + " · "
+                    + Model.cancellationLabel(modelData.departsSeconds)
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WordWrap
                 }
               }
             }

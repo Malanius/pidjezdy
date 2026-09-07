@@ -97,6 +97,12 @@ fn current_departures() -> Vec<u8> {
     serde_json::to_vec(&document).unwrap()
 }
 
+fn current_cancelled_departures() -> Vec<u8> {
+    let mut document: serde_json::Value = serde_json::from_slice(&current_departures()).unwrap();
+    document[0][0]["trip"]["is_canceled"] = json!(true);
+    serde_json::to_vec(&document).unwrap()
+}
+
 fn capped_departures() -> Vec<u8> {
     let document: serde_json::Value = serde_json::from_slice(DEPARTURES).unwrap();
     let template = document[0][0].clone();
@@ -225,7 +231,7 @@ fn json_happy_path_exercises_the_complete_binary() {
     );
     assert!(output.stderr.is_empty());
     let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document["schema_version"], 1);
+    assert_eq!(document["schema_version"], 2);
     assert_eq!(document["stale"], false);
     assert_eq!(document["generated_at"], document["data_updated_at"]);
     assert_eq!(document["departures"][0]["departure"]["line"], "158");
@@ -237,6 +243,32 @@ fn json_happy_path_exercises_the_complete_binary() {
         document["departures"][0]["boarding_point_name"],
         "Nearby stop"
     );
+    assert_eq!(document["cancelled"], json!([]));
+}
+
+#[test]
+fn json_all_cancelled_result_is_explicit() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = write_config(directory.path());
+    let server = serve_once(current_cancelled_departures());
+
+    let output = command(
+        directory.path(),
+        &config,
+        &server.endpoint,
+        &["departures", "--format", "json"],
+    );
+    server.finish();
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(document["departures"], json!([]));
+    assert_eq!(document["cancelled"][0]["departure"]["line"], "158");
+    assert_eq!(document["cancelled"][0]["departure"]["is_cancelled"], true);
 }
 
 #[test]
@@ -322,7 +354,7 @@ fn structured_api_error_is_a_json_failure_document() {
     assert!(!output.status.success());
     assert!(output.stderr.is_empty());
     let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(document["schema_version"], 1);
+    assert_eq!(document["schema_version"], 2);
     assert_eq!(document["error"]["kind"], "departures_unavailable");
     let causes = document["error"]["causes"].as_array().unwrap();
     assert!(causes.iter().any(|cause| {

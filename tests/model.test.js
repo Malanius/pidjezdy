@@ -6,7 +6,7 @@ const Model = require("../Model.js")
 
 function output(overrides = {}) {
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-09-05T08:00:00Z",
     data_updated_at: "2026-09-05T07:57:00Z",
     stale: true,
@@ -20,6 +20,7 @@ function output(overrides = {}) {
       leave_in_seconds: 270,
       departs_in_seconds: 630
     }],
+    cancelled: [],
     ...overrides
   })
 }
@@ -77,23 +78,31 @@ test("parseOutput rejects malformed envelopes and records", () => {
   assert.equal(Model.parseOutput("{}").ok, false)
   assert.equal(Model.parseOutput(output({ generated_at: "never" })).ok, false)
   assert.equal(Model.parseOutput(output({ departures: [{}] })).ok, false)
+  assert.equal(
+    Model.parseOutput(output({ cancelled: [{}] })).error,
+    "pidjezdy returned an unsupported cancellation record"
+  )
+  assert.equal(
+    Model.parseOutput(output({ cancelled: [{ departure: null }] })).error,
+    "pidjezdy returned an unsupported cancellation record"
+  )
 })
 
 test("parseOutput requires the matching envelope version", () => {
-  assert.equal(Model.expectedSchemaVersion, 1)
+  assert.equal(Model.expectedSchemaVersion, 2)
   assert.equal(
-    Model.parseOutput(output({ schema_version: 2 })).error,
-    "pidjezdy speaks envelope v2; this plugin needs v1 — update the plugin"
+    Model.parseOutput(output({ schema_version: 1 })).error,
+    "pidjezdy speaks envelope v1; this plugin needs v2 — update the plugin"
   )
   assert.equal(
     Model.parseOutput(output({ schema_version: undefined })).error,
-    "pidjezdy speaks envelope vundefined; this plugin needs v1 — update the plugin"
+    "pidjezdy speaks envelope vundefined; this plugin needs v2 — update the plugin"
   )
 })
 
 test("parseOutput validates and exposes CLI error envelopes", () => {
   var report = Model.parseOutput(JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-09-05T08:00:00Z",
     error: {
       kind: "departures_unavailable",
@@ -111,7 +120,7 @@ test("parseOutput validates and exposes CLI error envelopes", () => {
   })
 
   assert.equal(Model.parseOutput(JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     generated_at: "2026-09-05T08:00:00Z",
     error: { kind: "fetch_failed", message: "failed", causes: [7] }
   })).error, "pidjezdy returned an unsupported error document")
@@ -141,10 +150,59 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   assert.equal(rows[0].departsSeconds, 540)
 })
 
+test("cancellations are validated, advanced, and removed after departure", () => {
+  const report = Model.parseOutput(output({
+    departures: [],
+    cancelled: [{
+      departure: {
+        line: "158",
+        headsign: "Letňany",
+        platform_code: "A",
+        is_cancelled: true
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 30,
+      departs_in_seconds: 90
+    }]
+  }))
+
+  assert.equal(report.ok, true)
+  const current = Model.currentCancellations(report, Date.parse("2026-09-05T08:01:00Z"))
+  assert.equal(current.length, 1)
+  assert.equal(current[0].departsSeconds, 30)
+  assert.equal(
+    Model.currentCancellations(report, Date.parse("2026-09-05T08:01:31Z")).length,
+    0
+  )
+})
+
 test("countdown labels round down conservatively", () => {
   assert.equal(Model.leaveLabel(299), "leave in 4 min")
   assert.equal(Model.leaveLabel(59), "leave now")
   assert.equal(Model.departureLabel(659), "departs in 10 min")
+  assert.equal(Model.cancellationLabel(659), "would have departed in 10 min")
+})
+
+test("tooltip makes an all-cancelled result explicit", () => {
+  const report = Model.parseOutput(output({
+    departures: [],
+    cancelled: [{
+      departure: {
+        line: "158",
+        headsign: "Letňany",
+        platform_code: "A",
+        is_cancelled: true
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 270,
+      departs_in_seconds: 630
+    }]
+  }))
+
+  assert.equal(
+    Model.tooltip(report, Date.parse("2026-09-05T08:00:30Z"), "", false),
+    "STALE · 158 → Letňany · cancelled"
+  )
 })
 
 test("tooltip describes the nearest current departure and stale state", () => {

@@ -13,6 +13,7 @@ pub(crate) struct DepartureQuery {
     pub(crate) data_updated_at: DateTime<Utc>,
     pub(crate) stale: bool,
     pub(crate) departures: Vec<SelectedDeparture>,
+    pub(crate) cancelled: Vec<SelectedDeparture>,
     pub(crate) warnings: Vec<DepartureWarning>,
 }
 
@@ -121,7 +122,7 @@ where
             (cached.departures, cached.fetched_at, true, Vec::new())
         }
     };
-    let selected_departures = select_departures(
+    let selection = select_departures(
         config,
         &departures,
         generated_at,
@@ -131,14 +132,15 @@ where
         },
     );
     let mut warnings = warnings;
-    if !stale && selected_departures.len() < limit {
+    if !stale && selection.departures.len() < limit {
         warnings.extend(api_limit_warnings(config, &departures, generated_at));
     }
     Ok(DepartureQuery {
         generated_at,
         data_updated_at,
         stale,
-        departures: selected_departures,
+        departures: selection.departures,
+        cancelled: selection.cancelled,
         warnings,
     })
 }
