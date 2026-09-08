@@ -220,6 +220,13 @@ function cancellationLabel(seconds) {
   return "would have departed in " + wholeMinutes(seconds) + " min"
 }
 
+function emptyStateLabel(cancellationCount) {
+  var count = finiteNumber(cancellationCount)
+  return count !== null && count > 0
+    ? "No reachable departures — all matching services are cancelled."
+    : "No reachable configured departures."
+}
+
 function staleAgeLabel(seconds) {
   var ageSeconds = Math.floor(Math.max(0, Number(seconds) || 0))
   if (ageSeconds < 60) return "just now"
@@ -289,6 +296,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     delayLabel: delayLabel,
     departureTimingLabel: departureTimingLabel,
     cancellationLabel: cancellationLabel,
+    emptyStateLabel: emptyStateLabel,
     staleAgeLabel: staleAgeLabel,
     updateLabel: updateLabel,
     exitError: exitError,
