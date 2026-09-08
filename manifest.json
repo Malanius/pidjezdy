@@ -6,7 +6,9 @@
   "author": "Malanius",
   "license": "MIT",
   "description": "Reachable PID departures in the Omarchy bar",
-  "kinds": ["bar-widget"],
+  "kinds": [
+    "bar-widget"
+  ],
   "entryPoints": {
     "barWidget": "Panel.qml"
   },
