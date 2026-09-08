@@ -108,16 +108,14 @@ pub fn select_departures(
         .map(|(departure, (point, configuration_order))| {
             candidate(departure, point, configuration_order, now)
         })
-        .filter(|candidate| candidate.selected.reachable)
+        .filter(|candidate| options.include_unreachable || candidate.selected.reachable)
         .filter(|candidate| {
             upper_bound.is_none_or(|bound| candidate.selected.departure.effective_at() <= bound)
         })
         .collect::<Vec<_>>();
     let mut cancelled = deduplicate_candidates(cancelled_candidates);
     cancelled.sort_by_key(Candidate::ranking_key);
-    if upper_bound.is_none() {
-        cancelled.truncate(options.limit);
-    }
+    cancelled.truncate(options.limit);
 
     Selection {
         departures: selected,
@@ -383,6 +381,29 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_notes_are_capped_when_departures_are_present() {
+        let configured = config(vec![point("Near", "U1", 4)]);
+        let mut departures = [
+            departure("cancelled-first", "U1", 10),
+            departure("cancelled-second", "U1", 12),
+            departure("cancelled-third", "U1", 14),
+            departure("first", "U1", 16),
+            departure("second", "U1", 18),
+        ];
+        for departure in &mut departures[..3] {
+            departure.is_cancelled = true;
+        }
+
+        let selection = select_departures(&configured, &departures, now(), options(2));
+
+        assert_eq!(trip_ids(&selection.departures), ["first", "second"]);
+        assert_eq!(
+            trip_ids(&selection.cancelled),
+            ["cancelled-first", "cancelled-second"]
+        );
+    }
+
+    #[test]
     fn all_cancelled_results_are_explicit_and_capped_at_the_limit() {
         let configured = config(vec![point("Near", "U1", 4)]);
         let mut departures = [
@@ -414,9 +435,11 @@ mod tests {
 
     #[test]
     fn can_include_unreachable_departures_for_diagnostics() {
+        let mut cancelled = departure("cancelled", "U1", 5);
+        cancelled.is_cancelled = true;
         let selected = select_departures(
             &config(vec![point("Near", "U1", 4)]),
-            &[departure("too-soon", "U1", 5)],
+            &[departure("too-soon", "U1", 5), cancelled],
             now(),
             SelectionOptions {
                 limit: 3,
@@ -426,6 +449,9 @@ mod tests {
         assert_eq!(selected.departures.len(), 1);
         assert!(!selected.departures[0].reachable);
         assert_eq!(selected.departures[0].leave_in_seconds, -60);
+        assert_eq!(selected.cancelled.len(), 1);
+        assert!(!selected.cancelled[0].reachable);
+        assert_eq!(selected.cancelled[0].leave_in_seconds, -60);
     }
 
     #[test]
