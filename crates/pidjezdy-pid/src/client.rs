@@ -12,7 +12,7 @@ use crate::request::DepartureBoardRequest;
 use crate::response::{PidResponseError, parse_response};
 
 pub const DEFAULT_ENDPOINT: &str = "https://data.pid.cz/departures/data.php";
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(15);
 const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
 const MAX_BODY_BYTES: u64 = 1024 * 1024;
 const MAX_ERROR_BODY_BYTES: u64 = 1024;

@@ -117,7 +117,7 @@ the response body may either be gzip bytes or already-decoded JSON. This makes
 strict header-driven clients fail in some cases (`curl --compressed` can report
 error 61). `pidjezdy` requests identity encoding, disables automatic gzip
 decoding, and inspects the gzip magic bytes before decoding. Its request
-timeout is 10 seconds and it does not retry; caching and stale-data behavior
+timeout is 15 seconds and it does not retry; caching and stale-data behavior
 belong to a later integration layer.
 
 ## Maintenance probes
