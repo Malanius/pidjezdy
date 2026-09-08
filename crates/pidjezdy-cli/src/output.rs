@@ -148,13 +148,10 @@ fn write_text(
         )?;
     }
     if departures.is_empty() {
+        writeln!(output, "No reachable departures.")?;
         if cancelled.is_empty() {
-            return writeln!(output, "No reachable departures.");
+            return Ok(());
         }
-        writeln!(
-            output,
-            "No reachable departures — all matching services are cancelled."
-        )?;
     }
 
     let rows = departures.iter().map(TextRow::from).collect::<Vec<_>>();
@@ -457,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn text_output_explains_an_all_cancelled_result() {
+    fn text_output_lists_cancellations_after_the_empty_state() {
         let mut cancelled = selected();
         cancelled.departure.is_cancelled = true;
         let mut query = departure_query(Vec::new(), now(), false);
@@ -469,7 +466,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(output).unwrap(),
             concat!(
-                "No reachable departures — all matching services are cancelled.\n",
+                "No reachable departures.\n",
                 "cancelled: 158 → Centre from Nearby stop, would have departed in 10 min\n"
             )
         );
