@@ -182,7 +182,11 @@ fn isolated_command(root: &Path) -> Command {
         .env_clear()
         .env("HOME", root)
         .env("XDG_CACHE_HOME", root.join("cache"))
-        .env("XDG_CONFIG_HOME", root.join("config"));
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env(
+            "PIDJEZDY_CACHE",
+            root.join("cache/pidjezdy/departures.json"),
+        );
     command
 }
 

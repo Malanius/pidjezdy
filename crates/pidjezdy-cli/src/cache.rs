@@ -13,6 +13,7 @@ use thiserror::Error;
 const CACHE_FILE: &str = "departures.json";
 const CACHE_VERSION: u8 = 2;
 const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
+const CACHE_ENV: &str = "PIDJEZDY_CACHE";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -100,6 +101,12 @@ pub(crate) fn read_snapshot(
 }
 
 pub(crate) fn default_cache_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os(CACHE_ENV)
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        return Some(path);
+    }
     ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE))
 }
 
