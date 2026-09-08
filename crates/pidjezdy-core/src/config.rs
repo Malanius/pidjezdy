@@ -59,16 +59,20 @@ impl Config {
     ///
     /// # Errors
     ///
-    /// Returns every detected semantic error in declaration order.
+    /// Returns every detected normalization and semantic error in a stable order.
     pub fn validate(&self) -> Result<(), ValidationErrors> {
-        let mut normalized = self.clone();
-        normalized.normalize();
-        normalized.validate_normalized()
+        self.validate_with_errors(self.normalization_errors())
     }
 
     fn validate_normalized(&self) -> Result<(), ValidationErrors> {
-        let mut errors = Vec::new();
+        debug_assert!(
+            self.normalization_errors().is_empty(),
+            "validate_normalized requires normalized configuration text"
+        );
+        self.validate_with_errors(Vec::new())
+    }
 
+    fn validate_with_errors(&self, mut errors: Vec<String>) -> Result<(), ValidationErrors> {
         if !(1..=MAX_DISPLAY_DEPARTURES).contains(&self.display.max_departures) {
             errors.push(format!(
                 "display.max_departures must be between 1 and {MAX_DISPLAY_DEPARTURES}"
@@ -93,6 +97,51 @@ impl Config {
         } else {
             Err(ValidationErrors(errors))
         }
+    }
+
+    fn normalization_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        for (quota_index, quota) in self.display.route_quotas.iter().enumerate() {
+            report_unnormalized_text(
+                &quota.line,
+                &format!("display.route_quotas[{quota_index}].line"),
+                &mut errors,
+            );
+            report_unnormalized_text(
+                &quota.headsign,
+                &format!("display.route_quotas[{quota_index}].headsign"),
+                &mut errors,
+            );
+        }
+        for (point_index, point) in self.boarding_points.iter().enumerate() {
+            let prefix = format!("boarding_points[{point_index}]");
+            report_unnormalized_text(&point.name, &format!("{prefix}.name"), &mut errors);
+            for (stop_index, stop_id) in point.stop_ids.iter().enumerate() {
+                report_unnormalized_text(
+                    stop_id,
+                    &format!("{prefix}.stop_ids[{stop_index}]"),
+                    &mut errors,
+                );
+            }
+            for (route_index, route) in point.routes.iter().enumerate() {
+                let route_prefix = format!("{prefix}.routes[{route_index}]");
+                report_unnormalized_text(&route.line, &format!("{route_prefix}.line"), &mut errors);
+                report_unnormalized_text(
+                    &route.headsign,
+                    &format!("{route_prefix}.headsign"),
+                    &mut errors,
+                );
+            }
+        }
+        errors
+    }
+}
+
+fn report_unnormalized_text(value: &str, path: &str, errors: &mut Vec<String>) {
+    if value.trim() != value {
+        errors.push(format!(
+            "{path} has leading or trailing whitespace; call Config::normalize first"
+        ));
     }
 }
 
@@ -357,6 +406,45 @@ mod tests {
         assert_eq!(config.boarding_points[0].stop_ids, ["U123Z1P"]);
         assert_eq!(config.boarding_points[0].routes[0].line, "158");
         assert_eq!(config.boarding_points[0].routes[0].headsign, "Centrum");
+    }
+
+    #[test]
+    fn programmatic_configs_must_enforce_the_normalized_invariant() {
+        let config = Config {
+            display: DisplayConfig {
+                max_departures: 1,
+                route_quotas: vec![RouteQuota {
+                    line: " 158 ".into(),
+                    headsign: " Centrum ".into(),
+                    minimum_departures: 1,
+                }],
+            },
+            fetch: FetchConfig::default(),
+            boarding_points: vec![BoardingPoint {
+                name: " Nearby stop ".into(),
+                stop_ids: vec![" U123Z1P ".into()],
+                walking_minutes: 4,
+                safety_buffer_minutes: 2,
+                routes: vec![RouteFilter {
+                    line: " 158 ".into(),
+                    headsign: " Centrum ".into(),
+                }],
+            }],
+        };
+
+        let errors = config.validate().unwrap_err();
+
+        assert_eq!(
+            errors.0,
+            [
+                "display.route_quotas[0].line has leading or trailing whitespace; call Config::normalize first",
+                "display.route_quotas[0].headsign has leading or trailing whitespace; call Config::normalize first",
+                "boarding_points[0].name has leading or trailing whitespace; call Config::normalize first",
+                "boarding_points[0].stop_ids[0] has leading or trailing whitespace; call Config::normalize first",
+                "boarding_points[0].routes[0].line has leading or trailing whitespace; call Config::normalize first",
+                "boarding_points[0].routes[0].headsign has leading or trailing whitespace; call Config::normalize first",
+            ]
+        );
     }
 
     #[test]
