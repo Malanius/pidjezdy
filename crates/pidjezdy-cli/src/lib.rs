@@ -17,7 +17,7 @@ mod output;
 
 pub use departures::{DepartureQueryError, DepartureUnavailable};
 use departures::{configured_request, query_departures};
-pub use output::OutputError;
+pub use output::{OutputError, distinct_causes};
 use output::{OutputFormat, write_departures, write_json_error};
 
 const CONFIG_ENV: &str = "PIDJEZDY_CONFIG";
