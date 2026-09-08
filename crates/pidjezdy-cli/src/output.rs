@@ -113,7 +113,9 @@ pub(crate) fn write_json_error(
     Ok(())
 }
 
-fn distinct_causes(error: &(dyn Error + 'static)) -> Vec<String> {
+/// Collect source messages that are not already included by their wrapper.
+#[must_use]
+pub fn distinct_causes(error: &(dyn Error + 'static)) -> Vec<String> {
     let mut causes = Vec::new();
     let mut previous = error.to_string();
     let mut source = error.source();

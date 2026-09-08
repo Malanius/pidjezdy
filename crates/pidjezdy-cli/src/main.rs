@@ -18,17 +18,9 @@ fn write_error_report(
     output: &mut impl Write,
     error: &(dyn Error + 'static),
 ) -> Result<(), std::io::Error> {
-    let mut previous = error.to_string();
-    writeln!(output, "pidjezdy: {previous}")?;
-
-    let mut source = error.source();
-    while let Some(cause) = source {
-        let message = cause.to_string();
-        if !previous.ends_with(&message) {
-            write_cause(output, &message)?;
-        }
-        previous = message;
-        source = cause.source();
+    writeln!(output, "pidjezdy: {error}")?;
+    for cause in pidjezdy::distinct_causes(error) {
+        write_cause(output, &cause)?;
     }
     Ok(())
 }
