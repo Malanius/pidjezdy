@@ -145,8 +145,14 @@ fn write_text(
             stale_age_label(age_seconds)
         )?;
     }
-    if departures.is_empty() && cancelled.is_empty() {
-        return writeln!(output, "No reachable departures.");
+    if departures.is_empty() {
+        if cancelled.is_empty() {
+            return writeln!(output, "No reachable departures.");
+        }
+        writeln!(
+            output,
+            "No reachable departures — all matching services are cancelled."
+        )?;
     }
 
     let rows = departures.iter().map(TextRow::from).collect::<Vec<_>>();
@@ -460,7 +466,10 @@ mod tests {
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "cancelled: 158 → Centre from Nearby stop, would have departed in 10 min\n"
+            concat!(
+                "No reachable departures — all matching services are cancelled.\n",
+                "cancelled: 158 → Centre from Nearby stop, would have departed in 10 min\n"
+            )
         );
     }
 

@@ -186,6 +186,16 @@ test("countdown labels round down conservatively", () => {
   assert.equal(Model.cancellationLabel(659), "would have departed in 10 min")
 })
 
+test("empty state explains an all-cancelled result", () => {
+  assert.equal(Model.emptyStateLabel(0), "No reachable configured departures.")
+  assert.equal(Model.emptyStateLabel(undefined), "No reachable configured departures.")
+  assert.equal(Model.emptyStateLabel(NaN), "No reachable configured departures.")
+  assert.equal(
+    Model.emptyStateLabel("1"),
+    "No reachable departures — all matching services are cancelled."
+  )
+})
+
 test("delay labels only material late and early running", () => {
   for (const [delay, expected] of [
     [null, ""],

@@ -265,11 +265,11 @@ Panel {
 
           Text {
             visible: !root.loading && root.errorMessage === ""
-              && root.departures.length === 0 && root.cancellations.length === 0
+              && root.departures.length === 0
             width: parent.width
             topPadding: Style.space(20)
             bottomPadding: Style.space(20)
-            text: "No reachable configured departures."
+            text: Model.emptyStateLabel(root.cancellations.length)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
