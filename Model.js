@@ -223,7 +223,7 @@ function cancellationLabel(seconds) {
 function emptyStateLabel(cancellationCount) {
   var count = finiteNumber(cancellationCount)
   return count !== null && count > 0
-    ? "No reachable departures — all matching services are cancelled."
+    ? "No reachable departures."
     : "No reachable configured departures."
 }
 

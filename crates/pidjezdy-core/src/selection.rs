@@ -422,6 +422,23 @@ mod tests {
     }
 
     #[test]
+    fn reachable_cancellation_can_coexist_with_unreachable_running_service() {
+        let configured = config(vec![point("Near", "U1", 4)]);
+        let mut cancelled = departure("cancelled", "U1", 20);
+        cancelled.is_cancelled = true;
+
+        let selection = select_departures(
+            &configured,
+            &[departure("running-too-soon", "U1", 5), cancelled],
+            now(),
+            options(3),
+        );
+
+        assert!(selection.departures.is_empty());
+        assert_eq!(trip_ids(&selection.cancelled), ["cancelled"]);
+    }
+
+    #[test]
     fn unreachable_cancellations_are_not_reported() {
         let configured = config(vec![point("Near", "U1", 4)]);
         let mut cancelled = departure("too-soon", "U1", 5);

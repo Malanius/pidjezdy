@@ -97,6 +97,14 @@ rendered width. It rounds time down conservatively:
 cancelled: 123 → City centre from Nearby stop, would have departed in 12 min
 ```
 
+When no departure is reachable but matching cancellations remain relevant,
+the empty-state line is still shown before the cancellation notes:
+
+```text
+No reachable departures.
+cancelled: 123 → City centre from Nearby stop, would have departed in 12 min
+```
+
 On an interactive terminal, the line, direction, and leave-by time are
 emphasized while secondary details and separators are dimmed. ANSI styling is
 automatically omitted when output is redirected or piped, and can also be
@@ -156,10 +164,11 @@ A departure is reachable when its predicted time, or scheduled time when no
 prediction exists, leaves at least the configured walking time plus safety
 buffer. Unmatched and already-unreachable departures are omitted. Cancelled
 departures never consume result slots; instead, reachable matching
-cancellations at or before the last displayed departure appear as notes. When
-there are no usable departures, up to the requested limit of reachable
-cancellations is shown so an all-cancelled result is not mistaken for the end
-of service. When the same trip serves multiple configured boarding points,
+cancellations at or before the last displayed departure appear as notes. At
+most the requested limit of cancellation notes accompanies at most the
+requested limit of departures, including when no departure is reachable. The
+notes identify cancelled services without implying that every matching service
+is cancelled. When the same trip serves multiple configured boarding points,
 the CLI keeps the option that leaves the most time to reach it.
 
 For scripts and the future Omarchy plugin, request JSON instead of parsing the
