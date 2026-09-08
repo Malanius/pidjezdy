@@ -179,7 +179,9 @@ fn command(root: &Path, config: &Path, endpoint: &str, arguments: &[&str]) -> Ou
 fn isolated_command(root: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pidjezdy"));
     command
-        .env_clear()
+        .env_remove("PIDJEZDY_CONFIG")
+        .env_remove("PIDJEZDY_ENDPOINT")
+        .env_remove("PIDJEZDY_CACHE")
         .env("HOME", root)
         .env("XDG_CACHE_HOME", root.join("cache"))
         .env("XDG_CONFIG_HOME", root.join("config"))
