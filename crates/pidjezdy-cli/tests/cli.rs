@@ -296,10 +296,12 @@ fn text_happy_path_is_aligned_and_unstyled_when_piped() {
     let lines = text.lines().collect::<Vec<_>>();
     assert_eq!(lines.len(), 2);
     assert!(lines[0].starts_with("158  Centrum"), "{text}");
-    assert!(lines[0].contains("leave in "), "{text}");
+    assert!(lines[0].contains("leave by "), "{text}");
+    assert!(lines[0].contains(" · in "), "{text}");
     assert!(lines[1].contains("Nearby stop · platform A"), "{text}");
     assert!(lines[1].contains("+2 late"), "{text}");
-    assert!(lines[1].contains("departs in "), "{text}");
+    assert!(lines[1].contains("departs "), "{text}");
+    assert!(lines[1].contains(" · in "), "{text}");
 }
 
 #[test]
@@ -415,7 +417,7 @@ fn network_failure_reuses_and_reselects_a_compatible_cache() {
     assert!(
         String::from_utf8(stale_text.stdout)
             .unwrap()
-            .starts_with("STALE · data updated ")
+            .starts_with("STALE · last updated ")
     );
 }
 

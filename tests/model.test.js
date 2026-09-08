@@ -184,6 +184,8 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   assert.equal(rows[0].leaveSeconds, 60)
   assert.equal(rows[0].departsSeconds, 540)
   assert.equal(rows[0].delaySeconds, null)
+  assert.equal(rows[0].leaveAtMs, Date.parse("2026-09-05T08:02:00Z"))
+  assert.equal(rows[0].departsAtMs, Date.parse("2026-09-05T08:10:00Z"))
 })
 
 test("cancellations are validated, advanced, and removed after departure", () => {
@@ -206,6 +208,7 @@ test("cancellations are validated, advanced, and removed after departure", () =>
   const current = Model.currentCancellations(report, Date.parse("2026-09-05T08:01:00Z"))
   assert.equal(current.length, 1)
   assert.equal(current[0].departsSeconds, 30)
+  assert.equal(current[0].departsAtMs, Date.parse("2026-09-05T08:01:30Z"))
   assert.equal(
     Model.currentCancellations(report, Date.parse("2026-09-05T08:01:31Z")).length,
     0
@@ -213,10 +216,12 @@ test("cancellations are validated, advanced, and removed after departure", () =>
 })
 
 test("countdown labels round down conservatively", () => {
-  assert.equal(Model.leaveLabel(299), "leave in 4 min")
-  assert.equal(Model.leaveLabel(59), "leave now")
-  assert.equal(Model.departureLabel(659), "departs in 10 min")
-  assert.equal(Model.cancellationLabel(659), "would have departed in 10 min")
+  const timestamp = new Date(2026, 0, 2, 3, 4).getTime()
+  assert.equal(Model.clockLabel(timestamp), "03:04")
+  assert.equal(Model.leaveLabel(timestamp, 299), "leave by 03:04 · in 4 min")
+  assert.equal(Model.leaveLabel(timestamp, 59), "leave by 03:04 · now")
+  assert.equal(Model.departureLabel(timestamp, 659), "departs 03:04 · in 10 min")
+  assert.equal(Model.cancellationLabel(timestamp, 659), "03:04 · in 10 min")
 })
 
 test("empty state distinguishes cancellation notes from no cancellation data", () => {
@@ -230,6 +235,7 @@ test("empty state distinguishes cancellation notes from no cancellation data", (
 })
 
 test("delay labels only material late and early running", () => {
+  const timestamp = new Date(2026, 0, 2, 3, 4).getTime()
   for (const [delay, expected] of [
     [null, ""],
     [0, ""],
@@ -243,10 +249,13 @@ test("delay labels only material late and early running", () => {
     assert.equal(Model.delayLabel(delay), expected)
   }
   assert.equal(
-    Model.departureTimingLabel(125, 659),
-    "+2 late, departs in 10 min"
+    Model.departureTimingLabel(timestamp, 125, 659),
+    "departs 03:04 · in 10 min · +2 late"
   )
-  assert.equal(Model.departureTimingLabel(null, 659), "departs in 10 min")
+  assert.equal(
+    Model.departureTimingLabel(timestamp, null, 659),
+    "departs 03:04 · in 10 min"
+  )
 })
 
 test("stale age uses human scale boundaries", () => {
@@ -280,17 +289,21 @@ test("tooltip makes an all-cancelled result explicit", () => {
     }]
   }))
 
-  assert.equal(
-    Model.tooltip(report, Date.parse("2026-09-05T08:00:30Z"), "", false),
-    "STALE · 158 → Letňany · cancelled"
-  )
+  const now = Date.parse("2026-09-05T08:00:30Z")
+  const departureTime = Date.parse("2026-09-05T08:10:30Z")
+  assert.equal(Model.tooltip(report, now, "", false),
+    "STALE · 158 → Letňany · " + Model.clockLabel(departureTime)
+      + " · in 10 min · cancelled")
 })
 
 test("tooltip describes the nearest current departure and stale state", () => {
   const report = Model.parseOutput(output())
   const now = Date.parse("2026-09-05T08:00:30Z")
-  assert.equal(Model.tooltip(report, now, "", false), "STALE · 158 → Letňany · leave in 4 min")
-  assert.equal(Model.updateLabel(report, now), "STALE · updated 3 min ago")
+  const leaveTime = Date.parse("2026-09-05T08:04:30Z")
+  assert.equal(Model.tooltip(report, now, "", false),
+    "STALE · 158 → Letňany · leave by " + Model.clockLabel(leaveTime) + " · in 4 min")
+  assert.equal(Model.updateLabel(report, now),
+    "STALE · last updated " + Model.clockLabel(report.dataUpdatedAtMs) + " · 3 min ago")
   assert.equal(Model.tooltip(null, now, "command failed", false), "PID departures · command failed")
 })
 
@@ -300,6 +313,7 @@ test("tooltip marks retained departures when the latest refresh failed", () => {
 
   assert.equal(
     Model.tooltip(report, now, "request failed", false),
-    "⚠ 158 → Letňany · leave in 4 min"
+    "⚠ 158 → Letňany · leave by "
+      + Model.clockLabel(Date.parse("2026-09-05T08:04:30Z")) + " · in 4 min"
   )
 })
