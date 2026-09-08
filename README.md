@@ -13,12 +13,15 @@ documented in [`docs/pid-api.md`](docs/pid-api.md).
 
 ## Installation
 
-The CLI supports Linux, macOS, and Windows. The current release is installed
-from its Git tag with Cargo and requires Rust 1.85 or newer:
+The CLI supports Linux, macOS, and Windows. Install a release from its Git tag
+with Cargo; for example, v0.1.0 requires Rust 1.85 or newer:
 
 ```console
 cargo install --git https://github.com/Malanius/pidjezdy --tag v0.1.0 --locked pidjezdy
 ```
+
+Replace `v0.1.0` with the desired tag from the
+[GitHub releases](https://github.com/Malanius/pidjezdy/releases) page.
 
 GitHub releases contain source code only for now; prebuilt executables and
 crates.io packages are not published. After installation, create and validate
@@ -361,6 +364,8 @@ cargo install --git https://github.com/Malanius/pidjezdy --tag v0.1.0 --locked p
 pidjezdy config init
 ```
 
+Replace `v0.1.0` with the desired published release tag.
+
 Edit the resolved configuration and check it as described above, then install
 and enable the plugin:
 
@@ -443,8 +448,9 @@ different HTTP endpoint. An unset or empty value uses the built-in PID
 endpoint. It is intentionally not a normal user setting; the end-to-end suite
 uses it with loopback fixture servers. The suite similarly uses
 `PIDJEZDY_CACHE` to redirect cache access to an isolated temporary file on
-every supported operating system. Neither variable is a supported user-facing
-configuration interface, and tests never contact PID or touch user data.
+every supported operating system; it accepts only an absolute path. Neither
+variable is a supported user-facing configuration interface, and tests never
+contact PID or touch user data.
 
 ### Releases
 

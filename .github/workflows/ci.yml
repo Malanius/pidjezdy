@@ -51,9 +51,9 @@ jobs:
             }
           '
       - run: cargo fmt --check
-      - run: cargo build --workspace
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo build --workspace --locked
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
 
   rust-portability:
     name: Rust (${{ matrix.name }})

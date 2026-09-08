@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
@@ -101,13 +102,17 @@ pub(crate) fn read_snapshot(
 }
 
 pub(crate) fn default_cache_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os(CACHE_ENV)
+    resolve_cache_path(
+        std::env::var_os(CACHE_ENV).as_deref(),
+        ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE)),
+    )
+}
+
+fn resolve_cache_path(environment: Option<&OsStr>, platform: Option<PathBuf>) -> Option<PathBuf> {
+    environment
         .map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
-    {
-        return Some(path);
-    }
-    ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE))
+        .filter(|path| path.is_absolute())
+        .or(platform)
 }
 
 fn write_snapshot_to(
@@ -461,6 +466,24 @@ mod tests {
         assert_eq!(
             cache_directory(Path::new("cache/departures.json")),
             Path::new("cache")
+        );
+    }
+
+    #[test]
+    fn cache_override_requires_an_absolute_path() {
+        let platform = PathBuf::from("platform-cache/departures.json");
+        assert_eq!(
+            resolve_cache_path(
+                Some(OsStr::new("relative-cache.json")),
+                Some(platform.clone())
+            ),
+            Some(platform)
+        );
+
+        let absolute = std::env::current_dir().unwrap().join("isolated-cache.json");
+        assert_eq!(
+            resolve_cache_path(Some(absolute.as_os_str()), None),
+            Some(absolute)
         );
     }
 }
