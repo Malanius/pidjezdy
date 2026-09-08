@@ -57,6 +57,7 @@ test("process errors distinguish failed launches from failed runs", () => {
     Model.stderrError("invalid configuration\ncaused by: missing stops", 2),
     "invalid configuration"
   )
+  assert.equal(Model.stderrError("pidjezdy: invalid configuration", 2), "invalid configuration")
   assert.equal(Model.stderrError("  ", 2), "pidjezdy exited with status 2")
 })
 
@@ -126,6 +127,38 @@ test("parseOutput validates and exposes CLI error envelopes", () => {
     generated_at: "2026-09-05T08:00:00Z",
     error: { kind: "fetch_failed", message: "failed", causes: [7] }
   })).error, "pidjezdy returned an unsupported error document")
+})
+
+test("error summary adds only the root cause", () => {
+  var report = {
+    error: "departures unavailable",
+    causes: [
+      "cached fallback unavailable at /home/alice/departures.json",
+      "could not fetch PID departures",
+      "connection refused"
+    ]
+  }
+  assert.equal(
+    Model.errorSummary(report),
+    "departures unavailable — connection refused"
+  )
+  assert.equal(Model.errorSummary({ error: "configuration invalid", causes: [] }), "configuration invalid")
+  assert.equal(Model.errorSummary(null), "")
+})
+
+test("tooltip keeps detailed causes and filesystem paths out", () => {
+  var report = {
+    error: "departures unavailable",
+    causes: ["no cached departures at /home/alice/departures.json"]
+  }
+  var tooltip = Model.tooltip(null, Date.now(), report.error, false)
+
+  assert.equal(
+    Model.errorSummary(report),
+    "departures unavailable — no cached departures at /home/alice/departures.json"
+  )
+  assert.equal(tooltip, "PID departures · departures unavailable")
+  assert.equal(tooltip.includes("/home/alice"), false)
 })
 
 test("currentDepartures advances countdowns and removes missed options", () => {
