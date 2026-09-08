@@ -11,6 +11,27 @@ polls that CLI and presents its results in a native bar popup.
 The departure endpoint is not officially specified. Its observed contract is
 documented in [`docs/pid-api.md`](docs/pid-api.md).
 
+## Installation
+
+The CLI supports Linux, macOS, and Windows. The current release is installed
+from its Git tag with Cargo and requires Rust 1.85 or newer:
+
+```console
+cargo install --git https://github.com/Malanius/pidjezdy --tag v0.1.0 --locked pidjezdy
+```
+
+GitHub releases contain source code only for now; prebuilt executables and
+crates.io packages are not published. After installation, create and validate
+the platform-native configuration with:
+
+```console
+pidjezdy config init
+pidjezdy config check
+```
+
+Use `pidjezdy config path` and `pidjezdy cache path` to inspect the exact paths
+selected for the current operating system.
+
 ## Configuration
 
 `pidjezdy` follows platform conventions instead of reading configuration from
@@ -333,11 +354,10 @@ The plugin requests JSON and validates the shared envelope version for both
 successful and failed refreshes. It keeps the last successful departures
 visible when a later refresh fails.
 
-The CLI must be installed and configured first. When installing from the Git
-repository:
+The CLI must be installed and configured first:
 
 ```bash
-cargo install --git https://github.com/Malanius/pidjezdy --locked pidjezdy
+cargo install --git https://github.com/Malanius/pidjezdy --tag v0.1.0 --locked pidjezdy
 pidjezdy config init
 ```
 
@@ -421,8 +441,21 @@ plugin changes directly.
 `PIDJEZDY_ENDPOINT` is a testing aid that redirects departure requests to a
 different HTTP endpoint. An unset or empty value uses the built-in PID
 endpoint. It is intentionally not a normal user setting; the end-to-end suite
-uses it with loopback fixture servers and isolated temporary configuration and
-cache directories, so tests never contact PID or touch user data.
+uses it with loopback fixture servers. The suite similarly uses
+`PIDJEZDY_CACHE` to redirect cache access to an isolated temporary file on
+every supported operating system. Neither variable is a supported user-facing
+configuration interface, and tests never contact PID or touch user data.
+
+### Releases
+
+Use Conventional Commit subjects for merged changes. `fix` commits propose a
+patch release, `feat` commits propose a minor release, and a `!` or
+`BREAKING CHANGE` footer proposes a major release.
+
+After `main` passes CI, Release Please opens or refreshes a release PR containing
+the version changes and changelog. Merging that PR runs `main` CI again; only a
+successful run lets Release Please create the version tag and GitHub release.
+The user reviews and merges both normal contribution PRs and release PRs.
 
 For local plugin development, link the checkout into the user plugin
 directory. Omarchy hot-reloads changes:
