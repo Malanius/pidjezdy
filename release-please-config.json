@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "d1a211c3b3a27a80604c55560559ef232e87e2c7",
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "package-name": "pidjezdy",
+      "initial-version": "0.1.0",
+      "include-component-in-tag": false,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "manifest.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}
