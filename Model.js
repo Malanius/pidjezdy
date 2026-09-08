@@ -161,6 +161,8 @@ function currentDepartures(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
+      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
+      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
       leaveSeconds: leaveSeconds,
       departsSeconds: row.departsSeconds - elapsed
     })
@@ -182,6 +184,8 @@ function currentCancellations(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
+      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
+      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
       leaveSeconds: row.leaveSeconds - elapsed,
       departsSeconds: departsSeconds
     })
@@ -193,13 +197,21 @@ function wholeMinutes(seconds) {
   return Math.floor(Math.max(0, Number(seconds) || 0) / 60)
 }
 
-function leaveLabel(seconds) {
-  var minutes = wholeMinutes(seconds)
-  return minutes === 0 ? "leave now" : "leave in " + minutes + " min"
+function clockLabel(timestampMs) {
+  var date = new Date(Number(timestampMs))
+  if (!isFinite(date.getTime())) return "--:--"
+  return String(date.getHours()).padStart(2, "0")
+    + ":" + String(date.getMinutes()).padStart(2, "0")
 }
 
-function departureLabel(seconds) {
-  return "departs in " + wholeMinutes(seconds) + " min"
+function leaveLabel(timestampMs, seconds) {
+  var minutes = wholeMinutes(seconds)
+  return "leave by " + clockLabel(timestampMs) + " · "
+    + (minutes === 0 ? "now" : "in " + minutes + " min")
+}
+
+function departureLabel(timestampMs, seconds) {
+  return "departs " + clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
 }
 
 function delayLabel(delaySeconds) {
@@ -211,13 +223,13 @@ function delayLabel(delaySeconds) {
   return ""
 }
 
-function departureTimingLabel(delaySeconds, departsSeconds) {
+function departureTimingLabel(timestampMs, delaySeconds, departsSeconds) {
   var delay = delayLabel(delaySeconds)
-  return (delay ? delay + ", " : "") + departureLabel(departsSeconds)
+  return departureLabel(timestampMs, departsSeconds) + (delay ? " · " + delay : "")
 }
 
-function cancellationLabel(seconds) {
-  return "would have departed in " + wholeMinutes(seconds) + " min"
+function cancellationLabel(timestampMs, seconds) {
+  return clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
 }
 
 function emptyStateLabel(cancellationCount) {
@@ -240,7 +252,8 @@ function staleAgeLabel(seconds) {
 function updateLabel(report, nowMs) {
   if (!report || !isFinite(report.dataUpdatedAtMs)) return ""
   var ageSeconds = (Number(nowMs) - report.dataUpdatedAtMs) / 1000
-  return (report.stale ? "STALE · " : "") + "updated " + staleAgeLabel(ageSeconds)
+  return (report.stale ? "STALE · last updated " : "updated ")
+    + clockLabel(report.dataUpdatedAtMs) + " · " + staleAgeLabel(ageSeconds)
 }
 
 function exitError(exitCode) {
@@ -272,13 +285,15 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var first = rows[0]
     var prefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) prefix += "STALE · "
-    return prefix + first.line + " → " + first.headsign + " · " + leaveLabel(first.leaveSeconds)
+    return prefix + first.line + " → " + first.headsign + " · "
+      + leaveLabel(first.leaveAtMs, first.leaveSeconds)
   }
   if (cancellations.length > 0) {
     var cancellation = cancellations[0]
     var cancellationPrefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) cancellationPrefix += "STALE · "
-    return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · cancelled"
+    return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · "
+      + cancellationLabel(cancellation.departsAtMs, cancellation.departsSeconds) + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"
@@ -300,6 +315,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     currentDepartures: currentDepartures,
     currentCancellations: currentCancellations,
     wholeMinutes: wholeMinutes,
+    clockLabel: clockLabel,
     leaveLabel: leaveLabel,
     departureLabel: departureLabel,
     delayLabel: delayLabel,

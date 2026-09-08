@@ -341,7 +341,7 @@ Panel {
                   Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                   Text {
-                    text: Model.leaveLabel(modelData.leaveSeconds)
+                    text: Model.leaveLabel(modelData.leaveAtMs, modelData.leaveSeconds)
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -352,6 +352,7 @@ Panel {
 
                   Text {
                     text: Model.departureTimingLabel(
+                      modelData.departsAtMs,
                       modelData.delaySeconds,
                       modelData.departsSeconds
                     )
@@ -398,7 +399,7 @@ Panel {
                   width: parent.width
                   textFormat: Text.PlainText
                   text: modelData.boardingPoint + " · "
-                    + Model.cancellationLabel(modelData.departsSeconds)
+                    + Model.cancellationLabel(modelData.departsAtMs, modelData.departsSeconds)
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption

@@ -85,16 +85,17 @@ pidjezdy departures
 ```
 
 Human-readable output uses aligned two-line records separated at the full
-rendered width. It rounds time down conservatively:
+rendered width. Clock times use the local timezone, while accompanying relative
+times round down conservatively:
 
 ```text
-123  City centre                  leave in 4 min
-     Nearby stop · platform A  departs in 10 min
-────────────────────────────────────────────────
-456  Main station                leave in 7 min
-     Other stop · platform C   departs in 15 min
-────────────────────────────────────────────────
-cancelled: 123 → City centre from Nearby stop, would have departed in 12 min
+123  City centre                   leave by 08:31 · in 4 min
+     Nearby stop · platform A  departs 08:37 · in 10 min
+─────────────────────────────────────────────────────────
+456  Main station                 leave by 08:35 · in 8 min
+     Other stop · platform C  departs 08:43 · in 16 min · +2 late
+─────────────────────────────────────────────────────────
+cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
 
 When no departure is reachable but matching cancellations remain relevant,
@@ -102,7 +103,7 @@ the empty-state line is still shown before the cancellation notes:
 
 ```text
 No reachable departures.
-cancelled: 123 → City centre from Nearby stop, would have departed in 12 min
+cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
 
 On an interactive terminal, the line, direction, and leave-by time are
@@ -111,8 +112,8 @@ automatically omitted when output is redirected or piped, and can also be
 disabled by setting [`NO_COLOR`](https://no-color.org/). JSON output never
 contains terminal styling.
 
-Known delays of at least 60 seconds are shown in whole minutes before the
-departure countdown, for example `+2 late, departs in 10 min`. Trips running
+Known delays of at least 60 seconds are shown in whole minutes after the
+departure time, for example `departs 08:43 · in 16 min · +2 late`. Trips running
 early by at least 60 seconds are shown as `-N early`; smaller differences and
 departures without delay information are left unmarked. The departure and
 leave-by countdowns already use the predicted time when present.
@@ -301,7 +302,7 @@ rules are reapplied when it is read.
 Cached output is always labeled. Text output starts with a line such as:
 
 ```text
-STALE · data updated 2h 10m ago
+STALE · last updated 06:17 · 2h 10m ago
 ```
 
 Stale ages read `just now` below one minute, use minutes below one hour, hours
