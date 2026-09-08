@@ -39,6 +39,8 @@ impl Config {
     /// a `Config` directly should normalize it before passing it to departure
     /// selection.
     pub fn normalize(&mut self) {
+        // Keep this traversal synchronized with `normalization_errors`: every
+        // normalizable text field must be visited by both functions.
         for quota in &mut self.display.route_quotas {
             quota.line = quota.line.trim().to_owned();
             quota.headsign = quota.headsign.trim().to_owned();
@@ -100,6 +102,8 @@ impl Config {
     }
 
     fn normalization_errors(&self) -> Vec<String> {
+        // Keep this traversal synchronized with `normalize`: every text field
+        // normalized there must have its invariant checked here.
         let mut errors = Vec::new();
         for (quota_index, quota) in self.display.route_quotas.iter().enumerate() {
             report_unnormalized_text(
