@@ -251,8 +251,17 @@ function commandError(binaryPath) {
   return "could not run " + binaryPath + " — check the plugin's binary path setting"
 }
 
+function errorSummary(report) {
+  var message = nonEmptyString(report && report.error)
+  if (message === "" || !report || !Array.isArray(report.causes) || report.causes.length === 0)
+    return message
+  var rootCause = nonEmptyString(report.causes[report.causes.length - 1])
+  return rootCause === "" || rootCause === message ? message : message + " — " + rootCause
+}
+
 function stderrError(stderr, exitCode) {
   var diagnostic = nonEmptyString(stderr).split(/\r?\n/)[0]
+  diagnostic = diagnostic.replace(/^pidjezdy:\s*/, "")
   return diagnostic || exitError(exitCode)
 }
 
@@ -301,6 +310,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     updateLabel: updateLabel,
     exitError: exitError,
     commandError: commandError,
+    errorSummary: errorSummary,
     stderrError: stderrError,
     tooltip: tooltip
   }

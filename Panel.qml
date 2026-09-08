@@ -30,6 +30,7 @@ Panel {
   property string stdoutText: ""
   property string stderrText: ""
   property string errorMessage: ""
+  property string errorDetail: ""
   property var report: null
   property double nowMs: Date.now()
   property double lastAttemptMs: 0
@@ -62,18 +63,22 @@ Panel {
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
     var parsed = Model.parseOutput(stdoutText)
+    var message = ""
+    var detail = ""
     if (parsed.ok && exitCode === 0) {
       report = parsed
-      errorMessage = ""
     } else if (parsed.commandError === true) {
-      errorMessage = parsed.error
+      message = parsed.error
+      detail = Model.errorSummary(parsed)
     } else if (exitCode !== 0 && String(stdoutText || "").trim() === "") {
-      errorMessage = String(stderrText || "").trim() === ""
+      message = String(stderrText || "").trim() === ""
         ? Model.commandError(root.binaryPath)
         : Model.stderrError(stderrText, exitCode)
     } else {
-      errorMessage = parsed.ok ? Model.exitError(exitCode) : parsed.error
+      message = parsed.ok ? Model.exitError(exitCode) : parsed.error
     }
+    errorMessage = message
+    errorDetail = detail || message
 
     if (refreshQueued) {
       refreshQueued = false
@@ -255,7 +260,7 @@ Panel {
               anchors.fill: parent
               anchors.margins: Style.space(10)
               textFormat: Text.PlainText
-              text: root.errorMessage + (root.report ? "\nShowing the last successful result." : "")
+              text: root.errorDetail + (root.report ? "\nShowing the last successful result." : "")
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
