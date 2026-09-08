@@ -28,18 +28,10 @@ pub struct PidClient {
 }
 
 impl PidClient {
-    /// Create a client for PID's public departure-board endpoint.
+    /// Create a client for the specified PID departure-board endpoint.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the HTTP client or built-in endpoint cannot be
-    /// constructed.
-    pub fn new() -> Result<Self, PidClientError> {
-        Self::with_endpoint(DEFAULT_ENDPOINT)
-    }
-
-    /// Create a client with a custom endpoint, primarily for deterministic
-    /// integration tests.
+    /// The `pidjezdy` CLI passes the endpoint resolved from
+    /// `PIDJEZDY_ENDPOINT`, falling back to [`DEFAULT_ENDPOINT`].
     ///
     /// # Errors
     ///
