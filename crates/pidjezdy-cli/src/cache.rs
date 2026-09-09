@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
@@ -13,6 +14,7 @@ use thiserror::Error;
 const CACHE_FILE: &str = "departures.json";
 const CACHE_VERSION: u8 = 2;
 const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
+const CACHE_ENV: &str = "PIDJEZDY_CACHE";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -100,7 +102,23 @@ pub(crate) fn read_snapshot(
 }
 
 pub(crate) fn default_cache_path() -> Option<PathBuf> {
-    ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE))
+    resolve_cache_path(
+        std::env::var_os(CACHE_ENV).as_deref(),
+        ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE)),
+    )
+}
+
+/// Redirects the cache when `PIDJEZDY_CACHE` names a path, matching how
+/// `PIDJEZDY_CONFIG` and `PIDJEZDY_ENDPOINT` treat an empty value as unset.
+///
+/// The end-to-end suite needs this on Windows and macOS, where the platform
+/// cache directory comes from an operating system API rather than `HOME` or
+/// `XDG_CACHE_HOME`, so those variables cannot isolate a test.
+fn resolve_cache_path(environment: Option<&OsStr>, platform: Option<PathBuf>) -> Option<PathBuf> {
+    match environment {
+        Some(value) if !value.is_empty() => Some(PathBuf::from(value)),
+        _ => platform,
+    }
 }
 
 fn write_snapshot_to(
@@ -442,6 +460,26 @@ mod tests {
             "child test failed:\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn the_cache_override_wins_only_when_it_names_a_path() {
+        let platform = PathBuf::from("platform/departures.json");
+        let override_path = PathBuf::from("override/departures.json");
+
+        assert_eq!(
+            resolve_cache_path(Some(override_path.as_os_str()), Some(platform.clone())),
+            Some(override_path)
+        );
+        assert_eq!(
+            resolve_cache_path(Some(OsStr::new("")), Some(platform.clone())),
+            Some(platform.clone()),
+            "an empty value is treated as unset"
+        );
+        assert_eq!(
+            resolve_cache_path(None, Some(platform.clone())),
+            Some(platform)
         );
     }
 

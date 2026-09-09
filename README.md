@@ -419,10 +419,15 @@ plugin link. A checkout linked as described below continues to hot-reload
 plugin changes directly.
 
 `PIDJEZDY_ENDPOINT` is a testing aid that redirects departure requests to a
-different HTTP endpoint. An unset or empty value uses the built-in PID
-endpoint. It is intentionally not a normal user setting; the end-to-end suite
-uses it with loopback fixture servers and isolated temporary configuration and
-cache directories, so tests never contact PID or touch user data.
+different HTTP endpoint, and `PIDJEZDY_CACHE` redirects the departure cache to
+a given file. An unset or empty value falls back to the built-in endpoint and
+the platform cache path respectively. Neither is a normal user setting; the
+end-to-end suite uses them with loopback fixture servers and an isolated
+temporary cache, so tests never contact PID or touch user data.
+
+`PIDJEZDY_CACHE` exists because `HOME` and `XDG_CACHE_HOME` cannot isolate the
+cache on Windows or macOS, where the platform directory comes from an operating
+system API instead of the environment.
 
 For local plugin development, link the checkout into the user plugin
 directory. Omarchy hot-reloads changes:
