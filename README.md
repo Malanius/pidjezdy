@@ -269,7 +269,11 @@ time, and the PID request that produced them: the time window, API limit, and
 grouped stop IDs. A cache-write failure does not hide fresh results; it is
 reported as a warning on stderr.
 
-Print the platform-resolved cache path with:
+Both the snapshot location and the commands below follow `PIDJEZDY_CACHE` when
+it is set to a non-empty value. That variable is a testing aid rather than a
+user setting, and is described under [Development](#development).
+
+Print the resolved cache path with:
 
 ```console
 pidjezdy cache path
