@@ -176,13 +176,45 @@ fn command(root: &Path, config: &Path, endpoint: &str, arguments: &[&str]) -> Ou
     command.output().unwrap()
 }
 
+/// Variables the operating system needs in the child process itself. Clearing
+/// them breaks socket setup on Windows, where Winsock resolves system
+/// libraries through `SystemRoot`, so the CLI cannot reach a fixture server.
+#[cfg(windows)]
+const PLATFORM_ENVIRONMENT: &[&str] = &[
+    "COMSPEC",
+    "PATH",
+    "PATHEXT",
+    "ProgramData",
+    "SystemDrive",
+    "SystemRoot",
+    "TEMP",
+    "TMP",
+    "windir",
+];
+#[cfg(not(windows))]
+const PLATFORM_ENVIRONMENT: &[&str] = &[];
+
+/// The isolated cache file, pinned with `PIDJEZDY_CACHE`. On Windows the
+/// platform directory ignores `HOME` and `XDG_CACHE_HOME` entirely; on macOS
+/// `HOME` places it, but under `Library/Caches` rather than the XDG layout.
+/// Pinning the file keeps one expected path on every platform.
+fn cache_path(root: &Path) -> PathBuf {
+    root.join("cache").join("pidjezdy").join("departures.json")
+}
+
 fn isolated_command(root: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_pidjezdy"));
+    command.env_clear();
+    for name in PLATFORM_ENVIRONMENT {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
     command
-        .env_clear()
         .env("HOME", root)
         .env("XDG_CACHE_HOME", root.join("cache"))
-        .env("XDG_CONFIG_HOME", root.join("config"));
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("PIDJEZDY_CACHE", cache_path(root));
     command
 }
 
@@ -571,20 +603,14 @@ fn cache_path_does_not_require_valid_configuration() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        format!(
-            "{}\n",
-            directory
-                .path()
-                .join("cache/pidjezdy/departures.json")
-                .display()
-        )
+        format!("{}\n", cache_path(directory.path()).display())
     );
 }
 
 #[test]
 fn cache_clear_removes_a_snapshot_and_accepts_an_absent_cache() {
     let directory = tempfile::tempdir().unwrap();
-    let cache = directory.path().join("cache/pidjezdy/departures.json");
+    let cache = cache_path(directory.path());
     fs::create_dir_all(cache.parent().unwrap()).unwrap();
     fs::write(&cache, "cached departures").unwrap();
 

@@ -269,7 +269,11 @@ time, and the PID request that produced them: the time window, API limit, and
 grouped stop IDs. A cache-write failure does not hide fresh results; it is
 reported as a warning on stderr.
 
-Print the platform-resolved cache path with:
+Both the snapshot location and the commands below follow `PIDJEZDY_CACHE` when
+it is set to a non-empty value. That variable is a testing aid rather than a
+user setting, and is described under [Development](#development).
+
+Print the resolved cache path with:
 
 ```console
 pidjezdy cache path
@@ -419,10 +423,18 @@ plugin link. A checkout linked as described below continues to hot-reload
 plugin changes directly.
 
 `PIDJEZDY_ENDPOINT` is a testing aid that redirects departure requests to a
-different HTTP endpoint. An unset or empty value uses the built-in PID
-endpoint. It is intentionally not a normal user setting; the end-to-end suite
-uses it with loopback fixture servers and isolated temporary configuration and
-cache directories, so tests never contact PID or touch user data.
+different HTTP endpoint, and `PIDJEZDY_CACHE` redirects the departure cache to
+a given file. An unset or empty value falls back to the built-in endpoint and
+the platform cache path respectively. Neither is a normal user setting; the
+end-to-end suite uses them with loopback fixture servers and an isolated
+temporary cache, so tests never contact PID or touch user data.
+
+`PIDJEZDY_CACHE` exists because the platform cache directory is only partly
+reachable from the environment. On Windows it comes from a shell API and
+ignores both `HOME` and `XDG_CACHE_HOME`, so nothing in the environment can
+isolate it. On macOS it is `$HOME/Library/Caches`, so `HOME` does isolate it,
+but the layout differs from the XDG one used on Linux. Pinning the file
+directly gives the suite one predictable, isolated path on every platform.
 
 For local plugin development, link the checkout into the user plugin
 directory. Omarchy hot-reloads changes:

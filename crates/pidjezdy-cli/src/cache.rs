@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{Read, Write as _};
 use std::path::{Path, PathBuf};
@@ -13,6 +14,7 @@ use thiserror::Error;
 const CACHE_FILE: &str = "departures.json";
 const CACHE_VERSION: u8 = 2;
 const MAX_CACHE_BYTES: u64 = 4 * 1024 * 1024;
+const CACHE_ENV: &str = "PIDJEZDY_CACHE";
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -100,7 +102,26 @@ pub(crate) fn read_snapshot(
 }
 
 pub(crate) fn default_cache_path() -> Option<PathBuf> {
-    ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE))
+    resolve_cache_path(
+        std::env::var_os(CACHE_ENV).as_deref(),
+        ProjectDirs::from("", "", "pidjezdy").map(|dirs| dirs.cache_dir().join(CACHE_FILE)),
+    )
+}
+
+/// Redirects the cache when `PIDJEZDY_CACHE` names a path, matching how
+/// `PIDJEZDY_CONFIG` and `PIDJEZDY_ENDPOINT` treat an empty value as unset.
+///
+/// The end-to-end suite needs this on Windows, where the platform cache
+/// directory comes from a shell API and ignores both `HOME` and
+/// `XDG_CACHE_HOME`, leaving no way to isolate a test through the environment.
+/// On macOS `HOME` does place the cache, under `Library/Caches`, but the
+/// layout differs from the XDG one, so pinning the file keeps one path
+/// everywhere.
+fn resolve_cache_path(environment: Option<&OsStr>, platform: Option<PathBuf>) -> Option<PathBuf> {
+    match environment {
+        Some(value) if !value.is_empty() => Some(PathBuf::from(value)),
+        _ => platform,
+    }
 }
 
 fn write_snapshot_to(
@@ -434,6 +455,9 @@ mod tests {
             .arg("cache::tests::platform_cache_wrappers_resolve_and_round_trip")
             .env(CHILD_ROOT, directory.path())
             .env("XDG_CACHE_HOME", directory.path())
+            // The child asserts the platform path, so it must not inherit an
+            // override from whoever ran the suite.
+            .env_remove(CACHE_ENV)
             .output()
             .unwrap();
 
@@ -442,6 +466,36 @@ mod tests {
             "child test failed:\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn the_cache_override_wins_only_when_it_names_a_path() {
+        let platform = PathBuf::from("platform/departures.json");
+        let override_path = PathBuf::from("override/departures.json");
+
+        assert_eq!(
+            resolve_cache_path(Some(override_path.as_os_str()), Some(platform.clone())),
+            Some(override_path.clone())
+        );
+        assert_eq!(
+            resolve_cache_path(Some(override_path.as_os_str()), None),
+            Some(override_path),
+            "the override stands on its own when platform discovery finds nothing"
+        );
+        assert_eq!(
+            resolve_cache_path(None, None),
+            None,
+            "nothing to fall back to"
+        );
+        assert_eq!(
+            resolve_cache_path(Some(OsStr::new("")), Some(platform.clone())),
+            Some(platform.clone()),
+            "an empty value is treated as unset"
+        );
+        assert_eq!(
+            resolve_cache_path(None, Some(platform.clone())),
+            Some(platform)
         );
     }
 

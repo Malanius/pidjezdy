@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -59,8 +60,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: node --check Model.js
-      - run: node --test tests/model.test.js
+      - run: node --test tests/model.test.js tests/workflow.test.js
       - run: node -e 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8"))'
+
+  rust-portability:
+    name: Rust (${{ matrix.name }})
+    # Linux is already covered by the `rust` job on every pull request. These
+    # run only on the release pull request, or on demand. The branch prefix
+    # alone is not enough: any pull request, including one from a fork, can
+    # choose its own head branch name, so the author must be the bot that
+    # Release Please opens the pull request as.
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login == 'github-actions[bot]' &&
+       startsWith(github.head_ref, 'release-please--')) ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x86_64
+            runner: windows-latest
+          - name: macOS Apple Silicon
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
 
   release-please:
     needs: [rust, plugin-model]
