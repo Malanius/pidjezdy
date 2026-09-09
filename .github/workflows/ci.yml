@@ -68,11 +68,22 @@ jobs:
     # Linux is already covered by the `rust` job on every pull request. These
     # run only on the release pull request, or on demand. The branch prefix
     # alone is not enough: any pull request, including one from a fork, can
-    # choose its own head branch name, so the author must be the bot that
-    # Release Please opens the pull request as.
+    # choose its own head branch name, so the author has to be trusted too.
+    #
+    # That author is whoever Release Please authenticated as, not Release
+    # Please itself. The default GITHUB_TOKEN opens the pull request as
+    # github-actions[bot]; a personal access token would open it as the token
+    # owner instead. Both are accepted so that changing the token does not
+    # silently drop release coverage. A fork can forge neither.
+    #
+    # Failing closed here is silent: the matrix simply would not run and the
+    # release would be tagged on Linux evidence alone. If a GitHub App token
+    # is ever used, add its <app-slug>[bot] login here and to the fixtures in
+    # tests/workflow.test.js.
     if: >-
       (github.event_name == 'pull_request' &&
-       github.event.pull_request.user.login == 'github-actions[bot]' &&
+       (github.event.pull_request.user.login == 'github-actions[bot]' ||
+        github.event.pull_request.user.login == github.repository_owner) &&
        startsWith(github.head_ref, 'release-please--')) ||
       github.event_name == 'workflow_dispatch'
     strategy:

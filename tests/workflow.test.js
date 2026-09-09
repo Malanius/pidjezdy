@@ -51,6 +51,7 @@ function declaredTriggers() {
 
 const CONTEXT_KEYS = [
   "github.event.pull_request.user.login",
+  "github.repository_owner",
   "github.event_name",
   "github.head_ref",
 ];
@@ -82,6 +83,7 @@ function evaluate(expression, context) {
 }
 
 const RELEASE_BOT = "github-actions[bot]";
+const OWNER = "Malanius";
 const RELEASE_BRANCH = "release-please--branches--main--components--pidjezdy";
 
 const CASES = [
@@ -89,6 +91,7 @@ const CASES = [
     name: "the Release Please pull request runs the matrix",
     context: {
       "github.event_name": "pull_request",
+      "github.repository_owner": OWNER,
       "github.event.pull_request.user.login": RELEASE_BOT,
       "github.head_ref": RELEASE_BRANCH,
     },
@@ -98,6 +101,7 @@ const CASES = [
     name: "a release branch for a different component also does",
     context: {
       "github.event_name": "pull_request",
+      "github.repository_owner": OWNER,
       "github.event.pull_request.user.login": RELEASE_BOT,
       "github.head_ref": "release-please--branches--main--components--pidjezdy-cli",
     },
@@ -107,37 +111,53 @@ const CASES = [
     name: "a fork pull request copying the release branch name does not",
     context: {
       "github.event_name": "pull_request",
+      "github.repository_owner": OWNER,
       "github.event.pull_request.user.login": "outside-contributor",
       "github.head_ref": RELEASE_BRANCH,
     },
     expected: false,
   },
   {
+    name: "a release pull request opened with the owner's token also does",
+    context: {
+      "github.event_name": "pull_request",
+      "github.repository_owner": OWNER,
+      "github.event.pull_request.user.login": OWNER,
+      "github.head_ref": RELEASE_BRANCH,
+    },
+    expected: true,
+  },
+  {
     name: "the release bot on a non-release branch does not",
     context: {
       "github.event_name": "pull_request",
+      "github.repository_owner": OWNER,
       "github.event.pull_request.user.login": RELEASE_BOT,
       "github.head_ref": "dependabot/cargo/serde-1.0.230",
     },
     expected: false,
   },
   {
-    name: "an ordinary pull request does not",
+    name: "the owner on a non-release branch does not",
     context: {
       "github.event_name": "pull_request",
-      "github.event.pull_request.user.login": "Malanius",
+      "github.repository_owner": OWNER,
+      "github.event.pull_request.user.login": OWNER,
       "github.head_ref": "feature/some-change",
     },
     expected: false,
   },
   {
     name: "a push to main does not",
-    context: { "github.event_name": "push" },
+    context: { "github.event_name": "push", "github.repository_owner": OWNER },
     expected: false,
   },
   {
     name: "a manual dispatch does",
-    context: { "github.event_name": "workflow_dispatch" },
+    context: {
+      "github.event_name": "workflow_dispatch",
+      "github.repository_owner": OWNER,
+    },
     expected: true,
   },
 ];
