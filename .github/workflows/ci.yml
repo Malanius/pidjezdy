@@ -66,9 +66,14 @@ jobs:
   rust-portability:
     name: Rust (${{ matrix.name }})
     # Linux is already covered by the `rust` job on every pull request. These
-    # run only on the release pull request, or on demand.
+    # run only on the release pull request, or on demand. The branch prefix
+    # alone is not enough: any pull request, including one from a fork, can
+    # choose its own head branch name, so the author must be the bot that
+    # Release Please opens the pull request as.
     if: >-
-      startsWith(github.head_ref, 'release-please--') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login == 'github-actions[bot]' &&
+       startsWith(github.head_ref, 'release-please--')) ||
       github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false

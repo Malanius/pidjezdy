@@ -111,9 +111,12 @@ pub(crate) fn default_cache_path() -> Option<PathBuf> {
 /// Redirects the cache when `PIDJEZDY_CACHE` names a path, matching how
 /// `PIDJEZDY_CONFIG` and `PIDJEZDY_ENDPOINT` treat an empty value as unset.
 ///
-/// The end-to-end suite needs this on Windows and macOS, where the platform
-/// cache directory comes from an operating system API rather than `HOME` or
-/// `XDG_CACHE_HOME`, so those variables cannot isolate a test.
+/// The end-to-end suite needs this on Windows, where the platform cache
+/// directory comes from a shell API and ignores both `HOME` and
+/// `XDG_CACHE_HOME`, leaving no way to isolate a test through the environment.
+/// On macOS `HOME` does place the cache, under `Library/Caches`, but the
+/// layout differs from the XDG one, so pinning the file keeps one path
+/// everywhere.
 fn resolve_cache_path(environment: Option<&OsStr>, platform: Option<PathBuf>) -> Option<PathBuf> {
     match environment {
         Some(value) if !value.is_empty() => Some(PathBuf::from(value)),

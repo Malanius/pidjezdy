@@ -194,9 +194,10 @@ const PLATFORM_ENVIRONMENT: &[&str] = &[
 #[cfg(not(windows))]
 const PLATFORM_ENVIRONMENT: &[&str] = &[];
 
-/// The isolated cache file. `HOME` and `XDG_CACHE_HOME` cannot place this on
-/// Windows or macOS, where the platform directory comes from an operating
-/// system API, so the suite pins it with `PIDJEZDY_CACHE` instead.
+/// The isolated cache file, pinned with `PIDJEZDY_CACHE`. On Windows the
+/// platform directory ignores `HOME` and `XDG_CACHE_HOME` entirely; on macOS
+/// `HOME` places it, but under `Library/Caches` rather than the XDG layout.
+/// Pinning the file keeps one expected path on every platform.
 fn cache_path(root: &Path) -> PathBuf {
     root.join("cache").join("pidjezdy").join("departures.json")
 }
