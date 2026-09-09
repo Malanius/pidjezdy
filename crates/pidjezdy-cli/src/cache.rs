@@ -476,7 +476,17 @@ mod tests {
 
         assert_eq!(
             resolve_cache_path(Some(override_path.as_os_str()), Some(platform.clone())),
-            Some(override_path)
+            Some(override_path.clone())
+        );
+        assert_eq!(
+            resolve_cache_path(Some(override_path.as_os_str()), None),
+            Some(override_path),
+            "the override stands on its own when platform discovery finds nothing"
+        );
+        assert_eq!(
+            resolve_cache_path(None, None),
+            None,
+            "nothing to fall back to"
         );
         assert_eq!(
             resolve_cache_path(Some(OsStr::new("")), Some(platform.clone())),

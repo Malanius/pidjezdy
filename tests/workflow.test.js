@@ -95,6 +95,15 @@ const CASES = [
     expected: true,
   },
   {
+    name: "a release branch for a different component also does",
+    context: {
+      "github.event_name": "pull_request",
+      "github.event.pull_request.user.login": RELEASE_BOT,
+      "github.head_ref": "release-please--branches--main--components--pidjezdy-cli",
+    },
+    expected: true,
+  },
+  {
     name: "a fork pull request copying the release branch name does not",
     context: {
       "github.event_name": "pull_request",
