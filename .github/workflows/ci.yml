@@ -69,7 +69,6 @@ jobs:
     # run only on the release pull request, or on demand.
     if: >-
       startsWith(github.head_ref, 'release-please--') ||
-      startsWith(github.head_ref, 'ci/portability-') ||
       github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
