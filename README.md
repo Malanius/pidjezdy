@@ -433,6 +433,18 @@ omarchy-shell shell rescanPlugins
 omarchy plugin enable malanius.pidjezdy
 ```
 
+### Releases
+
+Releases are automated with Release Please, driven by Conventional Commit
+subjects on `main`: `fix` proposes a patch bump, `feat` a minor bump, and a `!`
+or `BREAKING CHANGE` footer a major bump.
+
+Once CI passes on `main`, Release Please opens or updates a release pull
+request holding the version bump and changelog. Merging it tags the release and
+publishes a GitHub release. The version is stored once in
+`[workspace.package]` and inherited by every crate; `Cargo.lock` and
+`manifest.json` are bumped in the same pull request.
+
 ## License
 
 [MIT](LICENSE)
