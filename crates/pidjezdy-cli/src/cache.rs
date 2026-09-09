@@ -452,6 +452,9 @@ mod tests {
             .arg("cache::tests::platform_cache_wrappers_resolve_and_round_trip")
             .env(CHILD_ROOT, directory.path())
             .env("XDG_CACHE_HOME", directory.path())
+            // The child asserts the platform path, so it must not inherit an
+            // override from whoever ran the suite.
+            .env_remove(CACHE_ENV)
             .output()
             .unwrap();
 
