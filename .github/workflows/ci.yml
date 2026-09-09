@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -61,6 +62,29 @@ jobs:
       - run: node --check Model.js
       - run: node --test tests/model.test.js
       - run: node -e 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8"))'
+
+  rust-portability:
+    name: Rust (${{ matrix.name }})
+    # Linux is already covered by the `rust` job on every pull request. These
+    # run only on the release pull request, or on demand.
+    if: >-
+      startsWith(github.head_ref, 'release-please--') ||
+      startsWith(github.head_ref, 'ci/portability-') ||
+      github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x86_64
+            runner: windows-latest
+          - name: macOS Apple Silicon
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --locked
 
   release-please:
     needs: [rust, plugin-model]
