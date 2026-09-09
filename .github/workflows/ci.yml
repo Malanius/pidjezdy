@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: node --check Model.js
-      - run: node --test tests/model.test.js
+      - run: node --test tests/model.test.js tests/workflow.test.js
       - run: node -e 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8"))'
 
   rust-portability:
