@@ -28,6 +28,27 @@ function jobCondition(job) {
   return body.join(" ");
 }
 
+/**
+ * Reads the top-level `on:` trigger names, without a YAML dependency.
+ */
+function declaredTriggers() {
+  const lines = fs.readFileSync(WORKFLOW, "utf8").split("\n");
+  const start = lines.indexOf("on:");
+  assert.notStrictEqual(start, -1, `no on: block in ${WORKFLOW}`);
+
+  const triggers = [];
+  for (const line of lines.slice(start + 1)) {
+    const indent = line.search(/\S/);
+    if (indent === -1) continue;
+    if (indent === 0) break; // next top-level key
+    if (indent === 2) {
+      const name = line.trim().replace(/:.*$/, "");
+      if (name) triggers.push(name);
+    }
+  }
+  return triggers;
+}
+
 const CONTEXT_KEYS = [
   "github.event.pull_request.user.login",
   "github.event_name",
@@ -83,7 +104,7 @@ const CASES = [
     expected: false,
   },
   {
-    name: "another bot pull request on a different branch does not",
+    name: "the release bot on a non-release branch does not",
     context: {
       "github.event_name": "pull_request",
       "github.event.pull_request.user.login": RELEASE_BOT,
@@ -117,6 +138,15 @@ test("the portability matrix runs only before a release or on demand", () => {
   for (const { name, context, expected } of CASES) {
     assert.strictEqual(evaluate(condition, context), expected, name);
   }
+});
+
+test("the workflow still declares the manual dispatch trigger", () => {
+  // The condition can name workflow_dispatch while the trigger is gone, which
+  // would silently make an on-demand matrix run impossible.
+  assert.ok(
+    declaredTriggers().includes("workflow_dispatch"),
+    `on: declares ${JSON.stringify(declaredTriggers())}`
+  );
 });
 
 test("the evaluator rejects syntax it does not model", () => {
