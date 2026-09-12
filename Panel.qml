@@ -89,7 +89,7 @@ Panel {
   function open() {
     root.controller.show()
     nowMs = Date.now()
-    if (!report || errorMessage !== "") refresh()
+    refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 

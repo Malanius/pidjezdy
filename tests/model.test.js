@@ -220,6 +220,7 @@ test("countdown labels round down conservatively", () => {
   assert.equal(Model.clockLabel(timestamp), "03:04")
   assert.equal(Model.leaveLabel(299), "leave in 4 min")
   assert.equal(Model.leaveLabel(59), "leave now")
+  assert.equal(Model.leaveClockLabel(timestamp), "leave by 03:04")
   assert.equal(Model.departureLabel(timestamp), "departs 03:04")
   assert.equal(Model.cancellationLabel(timestamp), "03:04")
 })
@@ -298,8 +299,9 @@ test("tooltip makes an all-cancelled result explicit", () => {
 test("tooltip describes the nearest current departure and stale state", () => {
   const report = Model.parseOutput(output())
   const now = Date.parse("2026-09-05T08:00:30Z")
+  const leaveTime = Date.parse("2026-09-05T08:04:30Z")
   assert.equal(Model.tooltip(report, now, "", false),
-    "STALE · 158 → Letňany · leave in 4 min")
+    "STALE · 158 → Letňany · " + Model.leaveClockLabel(leaveTime))
   assert.equal(Model.updateLabel(report, now),
     "STALE · last updated " + Model.clockLabel(report.dataUpdatedAtMs) + " · 3 min ago")
   assert.equal(Model.tooltip(null, now, "command failed", false), "PID departures · command failed")
@@ -311,6 +313,7 @@ test("tooltip marks retained departures when the latest refresh failed", () => {
 
   assert.equal(
     Model.tooltip(report, now, "request failed", false),
-    "⚠ 158 → Letňany · leave in 4 min"
+    "⚠ 158 → Letňany · "
+      + Model.leaveClockLabel(Date.parse("2026-09-05T08:04:30Z"))
   )
 })

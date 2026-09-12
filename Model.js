@@ -209,6 +209,10 @@ function leaveLabel(seconds) {
   return minutes === 0 ? "leave now" : "leave in " + minutes + " min"
 }
 
+function leaveClockLabel(timestampMs) {
+  return "leave by " + clockLabel(timestampMs)
+}
+
 function departureLabel(timestampMs) {
   return "departs " + clockLabel(timestampMs)
 }
@@ -285,7 +289,7 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var prefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) prefix += "STALE · "
     return prefix + first.line + " → " + first.headsign + " · "
-      + leaveLabel(first.leaveSeconds)
+      + leaveClockLabel(first.leaveAtMs)
   }
   if (cancellations.length > 0) {
     var cancellation = cancellations[0]
@@ -316,6 +320,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     wholeMinutes: wholeMinutes,
     clockLabel: clockLabel,
     leaveLabel: leaveLabel,
+    leaveClockLabel: leaveClockLabel,
     departureLabel: departureLabel,
     delayLabel: delayLabel,
     departureTimingLabel: departureTimingLabel,
