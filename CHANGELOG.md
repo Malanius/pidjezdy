@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/Malanius/pidjezdy/compare/v0.1.0...v0.2.0) (2026-09-12)
+
+
+### Features
+
+* install zsh completions with just ([#92](https://github.com/Malanius/pidjezdy/issues/92)) ([bc22feb](https://github.com/Malanius/pidjezdy/commit/bc22febb4d30c45c88fbe0091bb989ff99bf0ac8))
+
 ## 0.1.0 (2026-09-09)
 
 
