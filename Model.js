@@ -204,14 +204,13 @@ function clockLabel(timestampMs) {
     + ":" + String(date.getMinutes()).padStart(2, "0")
 }
 
-function leaveLabel(timestampMs, seconds) {
+function leaveLabel(seconds) {
   var minutes = wholeMinutes(seconds)
-  return "leave by " + clockLabel(timestampMs) + " · "
-    + (minutes === 0 ? "now" : "in " + minutes + " min")
+  return minutes === 0 ? "leave now" : "leave in " + minutes + " min"
 }
 
-function departureLabel(timestampMs, seconds) {
-  return "departs " + clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
+function departureLabel(timestampMs) {
+  return "departs " + clockLabel(timestampMs)
 }
 
 function delayLabel(delaySeconds) {
@@ -223,13 +222,13 @@ function delayLabel(delaySeconds) {
   return ""
 }
 
-function departureTimingLabel(timestampMs, delaySeconds, departsSeconds) {
+function departureTimingLabel(timestampMs, delaySeconds) {
   var delay = delayLabel(delaySeconds)
-  return departureLabel(timestampMs, departsSeconds) + (delay ? " · " + delay : "")
+  return departureLabel(timestampMs) + (delay ? " · " + delay : "")
 }
 
-function cancellationLabel(timestampMs, seconds) {
-  return clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
+function cancellationLabel(timestampMs) {
+  return clockLabel(timestampMs)
 }
 
 function emptyStateLabel(cancellationCount) {
@@ -286,14 +285,14 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var prefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) prefix += "STALE · "
     return prefix + first.line + " → " + first.headsign + " · "
-      + leaveLabel(first.leaveAtMs, first.leaveSeconds)
+      + leaveLabel(first.leaveSeconds)
   }
   if (cancellations.length > 0) {
     var cancellation = cancellations[0]
     var cancellationPrefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) cancellationPrefix += "STALE · "
     return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · "
-      + cancellationLabel(cancellation.departsAtMs, cancellation.departsSeconds) + " · cancelled"
+      + cancellationLabel(cancellation.departsAtMs) + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::io::Write;
 
-use chrono::{DateTime, Local, TimeDelta, Utc};
+use chrono::{DateTime, Local, Utc};
 use clap::ValueEnum;
 use pidjezdy_core::selection::SelectedDeparture;
 use serde::Serialize;
@@ -238,12 +238,11 @@ fn stale_age_label(age_seconds: i64) -> String {
 fn cancellation_note(selected: &SelectedDeparture) -> String {
     let departure = &selected.departure;
     format!(
-        "cancelled: {} → {} from {}, {} · in {} min",
+        "cancelled: {} → {} from {}, {}",
         departure.line,
         departure.headsign,
         selected.boarding_point_name,
-        local_clock(departure.effective_at()),
-        selected.departs_in_minutes()
+        local_clock(departure.effective_at())
     )
 }
 
@@ -278,22 +277,14 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
             .as_deref()
             .map(str::trim)
             .filter(|code| !code.is_empty())
-            .map_or_else(String::new, |code| format!(" · platform {code}"));
+            .map_or_else(String::new, |code| format!(" · {code}"));
         let leave = if selected.leave_in_minutes() == 0 {
-            format!("leave by {} · now", local_clock(leave_at(selected)))
+            "leave now".to_owned()
         } else {
-            format!(
-                "leave by {} · in {} min",
-                local_clock(leave_at(selected)),
-                selected.leave_in_minutes()
-            )
+            format!("leave in {} min", selected.leave_in_minutes())
         };
 
-        let departs = format!(
-            "departs {} · in {} min",
-            local_clock(departure.effective_at()),
-            selected.departs_in_minutes()
-        );
+        let departs = format!("departs {}", local_clock(departure.effective_at()));
         let departs = match delay_label(departure.delay_seconds) {
             Some(delay) => format!("{departs} · {delay}"),
             None => departs,
@@ -307,13 +298,6 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
             departs,
         }
     }
-}
-
-fn leave_at(selected: &SelectedDeparture) -> DateTime<Utc> {
-    selected.departure.effective_at()
-        - TimeDelta::minutes(
-            i64::from(selected.walking_minutes) + i64::from(selected.safety_buffer_minutes),
-        )
 }
 
 #[derive(Clone, Copy)]
@@ -437,13 +421,10 @@ mod tests {
         let lines = output.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].starts_with("158  Centre"));
-        assert!(lines[0].ends_with(&format!(
-            "leave by {} · in 4 min",
-            local_clock(leave_at(&selected()))
-        )));
-        assert!(lines[1].starts_with("     Nearby stop · platform A"));
+        assert!(lines[0].ends_with("leave in 4 min"));
+        assert!(lines[1].starts_with("     Nearby stop · A"));
         assert!(lines[1].ends_with(&format!(
-            "departs {} · in 10 min",
+            "departs {}",
             local_clock(selected().departure.effective_at())
         )));
     }
@@ -477,7 +458,7 @@ mod tests {
         assert_eq!(
             lines[3],
             format!(
-                "cancelled: 158 → Centre from Nearby stop, {} · in 10 min",
+                "cancelled: 158 → Centre from Nearby stop, {}",
                 local_clock(selected().departure.effective_at())
             )
         );
@@ -496,7 +477,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(output).unwrap(),
             format!(
-                "No reachable departures.\ncancelled: 158 → Centre from Nearby stop, {} · in 10 min\n",
+                "No reachable departures.\ncancelled: 158 → Centre from Nearby stop, {}\n",
                 local_clock(selected().departure.effective_at())
             )
         );
@@ -529,7 +510,7 @@ mod tests {
         let mut output = Vec::new();
         let query = departure_query(vec![departure], now(), false);
         write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
-        assert!(String::from_utf8(output).unwrap().contains(" · now"));
+        assert!(String::from_utf8(output).unwrap().contains("leave now"));
 
         let mut empty = Vec::new();
         let query = departure_query(Vec::new(), now(), false);
@@ -628,7 +609,7 @@ mod tests {
         assert!(
             String::from_utf8(output)
                 .unwrap()
-                .contains(" · in 10 min · +2 late")
+                .contains("departs 12:10 · +2 late")
         );
     }
 }

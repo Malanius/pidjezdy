@@ -85,17 +85,17 @@ pidjezdy departures
 ```
 
 Human-readable output uses aligned two-line records separated at the full
-rendered width. Clock times use the local timezone, while accompanying relative
-times round down conservatively:
+rendered width. Leave countdowns round down conservatively, while departure
+clocks use the local timezone:
 
 ```text
-123  City centre                   leave by 08:31 · in 4 min
-     Nearby stop · platform A  departs 08:37 · in 10 min
-─────────────────────────────────────────────────────────
-456  Main station                 leave by 08:35 · in 8 min
-     Other stop · platform C  departs 08:43 · in 16 min · +2 late
-─────────────────────────────────────────────────────────
-cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
+123  City centre        leave in 4 min
+     Nearby stop · A  departs 08:37
+──────────────────────────────────────────────
+456  Main station       leave in 8 min
+     Other stop · C    departs 08:43 · +2 late
+──────────────────────────────────────────────
+cancelled: 123 → City centre from Nearby stop, 08:42
 ```
 
 When no departure is reachable but matching cancellations remain relevant,
@@ -103,20 +103,20 @@ the empty-state line is still shown before the cancellation notes:
 
 ```text
 No reachable departures.
-cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
+cancelled: 123 → City centre from Nearby stop, 08:42
 ```
 
-On an interactive terminal, the line, direction, and leave-by time are
+On an interactive terminal, the line, direction, and leave countdown are
 emphasized while secondary details and separators are dimmed. ANSI styling is
 automatically omitted when output is redirected or piped, and can also be
 disabled by setting [`NO_COLOR`](https://no-color.org/). JSON output never
 contains terminal styling.
 
 Known delays of at least 60 seconds are shown in whole minutes after the
-departure time, for example `departs 08:43 · in 16 min · +2 late`. Trips running
+departure time, for example `departs 08:43 · +2 late`. Trips running
 early by at least 60 seconds are shown as `-N early`; smaller differences and
-departures without delay information are left unmarked. The departure and
-leave-by countdowns already use the predicted time when present.
+departures without delay information are left unmarked. The leave countdown
+and departure clock already use the predicted time when present.
 
 The selector first reserves up to each route's configured minimum, when that
 many matching departures are available, and then fills unused result slots
