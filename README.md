@@ -91,14 +91,17 @@ command invocation; rerun the command when current countdowns or status are
 needed:
 
 ```text
-123  City centre               leave in 4 min
-     Nearby stop · A            departs 08:37
-─────────────────────────────────────────────
-456  Main station              leave in 8 min
-     Other stop · C   departs 08:43 · +2 late
-─────────────────────────────────────────────
+123  City centre                leave in 4 min
+     Nearby stop · PA            departs 08:37
+──────────────────────────────────────────────
+456  Main station               leave in 8 min
+     Other stop · PC   departs 08:43 · +2 late
+──────────────────────────────────────────────
 cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
+
+Passenger-facing platform codes use a compact `P` marker, such as `P2` or
+`PA`, so numeric codes remain unambiguous without the longer `platform` label.
 
 When no departure is reachable but matching cancellations remain relevant,
 the empty-state line is still shown before the cancellation notes:

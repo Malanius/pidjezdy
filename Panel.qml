@@ -338,7 +338,7 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     text: modelData.boardingPoint
-                      + (modelData.platform ? " · " + modelData.platform : "")
+                      + (modelData.platform ? " · P" + modelData.platform : "")
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
