@@ -89,12 +89,12 @@ rendered width. Leave countdowns round down conservatively, while departure
 clocks use the local timezone:
 
 ```text
-123  City centre        leave in 4 min
-     Nearby stop · A  departs 08:37
-──────────────────────────────────────────────
-456  Main station       leave in 8 min
-     Other stop · C    departs 08:43 · +2 late
-──────────────────────────────────────────────
+123  City centre               leave in 4 min
+     Nearby stop · A            departs 08:37
+─────────────────────────────────────────────
+456  Main station              leave in 8 min
+     Other stop · C   departs 08:43 · +2 late
+─────────────────────────────────────────────
 cancelled: 123 → City centre from Nearby stop, 08:42
 ```
 
