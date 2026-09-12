@@ -24,12 +24,13 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
-function shouldRefreshOnOpen(running, lastAttemptMs, nowMs) {
+function shouldRefreshOnOpen(running, lastAttemptMs, nowMs, minimumAgeMs) {
   if (running) return false
   var lastAttempt = finiteNumber(lastAttemptMs)
   var now = finiteNumber(nowMs)
+  var minimumAge = finiteNumber(minimumAgeMs)
   if (lastAttempt === null || lastAttempt <= 0) return true
-  return now !== null && now - lastAttempt >= 30000
+  return now !== null && minimumAge !== null && now - lastAttempt >= minimumAge
 }
 
 function binaryPath(value) {

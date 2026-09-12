@@ -49,12 +49,14 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.binaryPath(" /opt/pidjezdy/bin/pidjezdy "), "/opt/pidjezdy/bin/pidjezdy")
 })
 
-test("popup-open refreshes respect the polling floor", () => {
+test("popup-open refreshes respect the configured polling interval", () => {
   const now = Date.parse("2026-09-05T08:00:30Z")
-  assert.equal(Model.shouldRefreshOnOpen(false, 0, now), true)
-  assert.equal(Model.shouldRefreshOnOpen(false, now - 29999, now), false)
-  assert.equal(Model.shouldRefreshOnOpen(false, now - 30000, now), true)
-  assert.equal(Model.shouldRefreshOnOpen(true, now - 30000, now), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, 0, now, 60000), true)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 59999, now, 60000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 60000, now, 60000), true)
+  assert.equal(Model.shouldRefreshOnOpen(true, now - 60000, now, 60000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 60000, now, 3600000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 3600000, now, 3600000), true)
 })
 
 test("process errors distinguish failed launches from failed runs", () => {
