@@ -51,7 +51,12 @@ test("settings are parsed and bounded defensively", () => {
 
 test("popup-open refreshes respect the configured polling interval", () => {
   const now = Date.parse("2026-09-05T08:00:30Z")
+  assert.equal(Model.openRefreshMinimumAge(true, "", 3600000), 3600000)
+  assert.equal(Model.openRefreshMinimumAge(false, "", 3600000), 5000)
+  assert.equal(Model.openRefreshMinimumAge(true, "request failed", 3600000), 5000)
   assert.equal(Model.shouldRefreshOnOpen(false, 0, now, 60000), true)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 4999, now, 5000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 5000, now, 5000), true)
   assert.equal(Model.shouldRefreshOnOpen(false, now - 59999, now, 60000), false)
   assert.equal(Model.shouldRefreshOnOpen(false, now - 60000, now, 60000), true)
   assert.equal(Model.shouldRefreshOnOpen(true, now - 60000, now, 60000), false)

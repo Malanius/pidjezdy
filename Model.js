@@ -24,6 +24,10 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
+function openRefreshMinimumAge(hasReport, errorMessage, refreshIntervalMs) {
+  return !hasReport || nonEmptyString(errorMessage) !== "" ? 5000 : refreshIntervalMs
+}
+
 function shouldRefreshOnOpen(running, lastAttemptMs, nowMs, minimumAgeMs) {
   if (running) return false
   var lastAttempt = finiteNumber(lastAttemptMs)
@@ -326,6 +330,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    openRefreshMinimumAge: openRefreshMinimumAge,
     shouldRefreshOnOpen: shouldRefreshOnOpen,
     binaryPath: binaryPath,
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,

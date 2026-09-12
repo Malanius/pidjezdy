@@ -331,8 +331,9 @@ native popup containing the closest reachable departures selected by the CLI,
 followed by relevant cancellation notes.
 It defaults to the right side of the bar, polls once per minute, and requests
 three departures so the popup remains compact. Opening the popup triggers a
-refresh when the configured polling interval has elapsed. The plugin does not
-run a daemon or access PID directly.
+refresh when the configured polling interval has elapsed, or retries a failed
+or empty refresh after five seconds. The plugin does not run a daemon or access
+PID directly.
 
 The plugin requests JSON and validates the shared envelope version for both
 successful and failed refreshes. It keeps the last successful departures

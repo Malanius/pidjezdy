@@ -90,11 +90,16 @@ Panel {
   function open() {
     root.controller.show()
     nowMs = Date.now()
+    var minimumAgeMs = Model.openRefreshMinimumAge(
+      report !== null,
+      errorMessage,
+      refreshIntervalSec * 1000
+    )
     if (Model.shouldRefreshOnOpen(
         queryProcess.running,
         lastAttemptMs,
         nowMs,
-        refreshIntervalSec * 1000
+        minimumAgeMs
     )) refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
