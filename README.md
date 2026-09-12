@@ -363,7 +363,7 @@ Left-click the icon to toggle the popup. Middle-click, `Enter`, or `r` refreshes
 immediately; `Esc` closes it. The popup advances the CLI's exact countdowns
 between polls and removes a departure as soon as its leave-by time passes, so
 the displayed minutes never overpromise. Material late or early running is
-shown beside the departure countdown. Cancellation notes remain until their
+shown beside the departure clock. Cancellation notes remain until their
 would-be departure time; an all-cancelled result is also called out in the icon
 tooltip. Failed refreshes retain the previous successful result but label the
 failure, while cached CLI results keep their `STALE` label and humanised age.
