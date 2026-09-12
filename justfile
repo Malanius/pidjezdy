@@ -4,8 +4,8 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 default:
     @just --list
 
-# Install the current CLI and refresh its Bash completion.
-install-local: _install-cli install-bash-completions
+# Install the current CLI and refresh its Bash and Zsh completions.
+install-local: _install-cli install-bash-completions install-zsh-completions
 
 [private]
 _install-cli:
@@ -26,4 +26,21 @@ install-bash-completions:
     cargo run --quiet --locked --package pidjezdy -- completions bash > "$completion_tmp"
     chmod 0644 "$completion_tmp"
     mv -f "$completion_tmp" "$completion_dir/pidjezdy"
+    trap - EXIT
+
+# Atomically refresh the user-local Zsh completion from this checkout.
+install-zsh-completions:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    data_home="${XDG_DATA_HOME:-${HOME:?HOME must be set}/.local/share}"
+    completion_dir="$data_home/zsh/site-functions"
+    install -d "$completion_dir"
+
+    completion_tmp="$(mktemp "$completion_dir/.pidjezdy.XXXXXX")"
+    trap 'rm -f "$completion_tmp"' EXIT
+
+    cargo run --quiet --locked --package pidjezdy -- completions zsh > "$completion_tmp"
+    chmod 0644 "$completion_tmp"
+    mv -f "$completion_tmp" "$completion_dir/_pidjezdy"
     trap - EXIT
