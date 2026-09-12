@@ -398,7 +398,7 @@ Panel {
                   width: parent.width
                   textFormat: Text.PlainText
                   text: modelData.boardingPoint + " · "
-                    + Model.cancellationLabel(modelData.departsAtMs)
+                    + Model.cancellationLabel(modelData.departsAtMs, modelData.departsSeconds)
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption

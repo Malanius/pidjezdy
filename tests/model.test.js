@@ -287,7 +287,7 @@ test("countdown labels round down conservatively", () => {
   assert.equal(Model.leaveLabel(59), "leave now")
   assert.equal(Model.leaveClockLabel(timestamp), "leave by 03:04")
   assert.equal(Model.departureLabel(timestamp), "departs 03:04")
-  assert.equal(Model.cancellationLabel(timestamp), "03:04")
+  assert.equal(Model.cancellationLabel(timestamp, 659), "03:04 · in 10 min")
 })
 
 test("empty state distinguishes cancellation notes from no cancellation data", () => {
@@ -360,7 +360,8 @@ test("tooltip makes an all-cancelled result explicit", () => {
   const now = Date.parse("2026-09-05T08:00:30Z")
   const departureTime = Date.parse("2026-09-05T08:10:30Z")
   assert.equal(Model.tooltip(report, now, "", false),
-    "STALE · 158 → Letňany · " + Model.clockLabel(departureTime) + " · cancelled")
+    "STALE · 158 → Letňany · " + Model.clockLabel(departureTime)
+      + " · in 10 min · cancelled")
 })
 
 test("tooltip describes the nearest current departure and stale state", () => {

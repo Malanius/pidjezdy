@@ -95,7 +95,7 @@ clocks use the local timezone:
 456  Main station              leave in 8 min
      Other stop · C   departs 08:43 · +2 late
 ─────────────────────────────────────────────
-cancelled: 123 → City centre from Nearby stop, 08:42
+cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
 
 When no departure is reachable but matching cancellations remain relevant,
@@ -103,7 +103,7 @@ the empty-state line is still shown before the cancellation notes:
 
 ```text
 No reachable departures.
-cancelled: 123 → City centre from Nearby stop, 08:42
+cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
 
 On an interactive terminal, the line, direction, and leave countdown are

@@ -238,11 +238,12 @@ fn stale_age_label(age_seconds: i64) -> String {
 fn cancellation_note(selected: &SelectedDeparture) -> String {
     let departure = &selected.departure;
     format!(
-        "cancelled: {} → {} from {}, {}",
+        "cancelled: {} → {} from {}, {} · in {} min",
         departure.line,
         departure.headsign,
         selected.boarding_point_name,
-        local_clock(departure.effective_at())
+        local_clock(departure.effective_at()),
+        selected.departs_in_minutes()
     )
 }
 
@@ -458,7 +459,7 @@ mod tests {
         assert_eq!(
             lines[3],
             format!(
-                "cancelled: 158 → Centre from Nearby stop, {}",
+                "cancelled: 158 → Centre from Nearby stop, {} · in 10 min",
                 local_clock(selected().departure.effective_at())
             )
         );
@@ -477,7 +478,7 @@ mod tests {
         assert_eq!(
             String::from_utf8(output).unwrap(),
             format!(
-                "No reachable departures.\ncancelled: 158 → Centre from Nearby stop, {}\n",
+                "No reachable departures.\ncancelled: 158 → Centre from Nearby stop, {} · in 10 min\n",
                 local_clock(selected().departure.effective_at())
             )
         );

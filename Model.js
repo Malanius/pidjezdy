@@ -248,8 +248,8 @@ function departureTimingLabel(timestampMs, delaySeconds) {
   return departureLabel(timestampMs) + (delay ? " · " + delay : "")
 }
 
-function cancellationLabel(timestampMs) {
-  return clockLabel(timestampMs)
+function cancellationLabel(timestampMs, seconds) {
+  return clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
 }
 
 function emptyStateLabel(cancellationCount) {
@@ -313,7 +313,7 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var cancellationPrefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) cancellationPrefix += "STALE · "
     return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · "
-      + cancellationLabel(cancellation.departsAtMs) + " · cancelled"
+      + cancellationLabel(cancellation.departsAtMs, cancellation.departsSeconds) + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"
