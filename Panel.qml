@@ -62,6 +62,7 @@ Panel {
   function finishQuery(exitCode) {
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
+    refreshTimer.restart()
     var parsed = Model.parseOutput(stdoutText)
     var message = ""
     var detail = ""
