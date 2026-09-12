@@ -62,6 +62,7 @@ Panel {
   function finishQuery(exitCode) {
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
+    refreshTimer.restart()
     var parsed = Model.parseOutput(stdoutText)
     var message = ""
     var detail = ""
@@ -89,7 +90,17 @@ Panel {
   function open() {
     root.controller.show()
     nowMs = Date.now()
-    if (!report || errorMessage !== "") refresh()
+    var minimumAgeMs = Model.openRefreshMinimumAge(
+      report !== null,
+      errorMessage,
+      refreshIntervalSec * 1000
+    )
+    if (Model.shouldRefreshOnOpen(
+        queryProcess.running,
+        lastAttemptMs,
+        nowMs,
+        minimumAgeMs
+    )) refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -327,7 +338,7 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     text: modelData.boardingPoint
-                      + (modelData.platform ? " · platform " + modelData.platform : "")
+                      + (modelData.platform ? " · P" + modelData.platform : "")
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -341,7 +352,7 @@ Panel {
                   Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                   Text {
-                    text: Model.leaveLabel(modelData.leaveAtMs, modelData.leaveSeconds)
+                    text: Model.leaveLabel(modelData.leaveSeconds)
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -353,8 +364,7 @@ Panel {
                   Text {
                     text: Model.departureTimingLabel(
                       modelData.departsAtMs,
-                      modelData.delaySeconds,
-                      modelData.departsSeconds
+                      modelData.delaySeconds
                     )
                     color: root.dim
                     font.family: root.fontFamily

@@ -15,6 +15,8 @@ function output(overrides = {}) {
         line: " 158 ",
         headsign: " Letňany ",
         platform_code: " A ",
+        scheduled_at: "2026-09-05T08:09:00Z",
+        predicted_at: "2026-09-05T08:10:30Z",
         delay_seconds: 125
       },
       boarding_point_name: " Nové Letňany ",
@@ -47,6 +49,21 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.binaryPath(" /opt/pidjezdy/bin/pidjezdy "), "/opt/pidjezdy/bin/pidjezdy")
 })
 
+test("popup-open refreshes respect the configured polling interval", () => {
+  const now = Date.parse("2026-09-05T08:00:30Z")
+  assert.equal(Model.openRefreshMinimumAge(true, "", 3600000), 3600000)
+  assert.equal(Model.openRefreshMinimumAge(false, "", 3600000), 5000)
+  assert.equal(Model.openRefreshMinimumAge(true, "request failed", 3600000), 5000)
+  assert.equal(Model.shouldRefreshOnOpen(false, 0, now, 60000), true)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 4999, now, 5000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 5000, now, 5000), true)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 59999, now, 60000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 60000, now, 60000), true)
+  assert.equal(Model.shouldRefreshOnOpen(true, now - 60000, now, 60000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 60000, now, 3600000), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 3600000, now, 3600000), true)
+})
+
 test("process errors distinguish failed launches from failed runs", () => {
   assert.equal(Model.exitError(7), "pidjezdy exited with status 7")
   assert.equal(
@@ -71,6 +88,8 @@ test("parseOutput validates and flattens the CLI envelope", () => {
     boardingPoint: "Nové Letňany",
     platform: "A",
     delaySeconds: 125,
+    leaveAtMs: Date.parse("2026-09-05T08:04:30Z"),
+    departsAtMs: Date.parse("2026-09-05T08:10:30Z"),
     leaveSeconds: 270,
     departsSeconds: 630
   })
@@ -81,6 +100,18 @@ test("parseOutput rejects malformed envelopes and records", () => {
   assert.equal(Model.parseOutput("{}").ok, false)
   assert.equal(Model.parseOutput(output({ generated_at: "never" })).ok, false)
   assert.equal(Model.parseOutput(output({ departures: [{}] })).ok, false)
+  assert.equal(Model.parseOutput(output({
+    departures: [{
+      departure: {
+        line: "158",
+        headsign: "Town",
+        scheduled_at: "invalid"
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 30,
+      departs_in_seconds: 90
+    }]
+  })).ok, false)
   assert.equal(
     Model.parseOutput(output({ cancelled: [{}] })).error,
     "pidjezdy returned an unsupported cancellation record"
@@ -165,13 +196,25 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   const report = Model.parseOutput(output({
     departures: [
       {
-        departure: { line: "158", headsign: "Letňany", platform_code: "A" },
+        departure: {
+          line: "158",
+          headsign: "Letňany",
+          platform_code: "A",
+          scheduled_at: "2026-09-05T08:06:30Z",
+          predicted_at: null
+        },
         boarding_point_name: "Near",
         leave_in_seconds: 30,
         departs_in_seconds: 390
       },
       {
-        departure: { line: "195", headsign: "Town", platform_code: null },
+        departure: {
+          line: "195",
+          headsign: "Town",
+          platform_code: null,
+          scheduled_at: "2026-09-05T08:10:00Z",
+          predicted_at: null
+        },
         boarding_point_name: "Far",
         leave_in_seconds: 120,
         departs_in_seconds: 600
@@ -188,6 +231,33 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   assert.equal(rows[0].departsAtMs, Date.parse("2026-09-05T08:10:00Z"))
 })
 
+test("currentDepartures keeps exact clocks when relative seconds are truncated", () => {
+  const report = Model.parseOutput(output({
+    generated_at: "2026-09-05T08:27:00.400Z",
+    departures: [{
+      departure: {
+        line: "158",
+        headsign: "Letňany",
+        scheduled_at: "2026-09-05T08:37:00Z",
+        predicted_at: null
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 299,
+      departs_in_seconds: 599
+    }]
+  }))
+
+  const row = Model.currentDepartures(report, report.generatedAtMs)[0]
+  assert.equal(
+    Model.clockLabel(row.leaveAtMs),
+    Model.clockLabel(Date.parse("2026-09-05T08:32:00Z"))
+  )
+  assert.equal(
+    Model.clockLabel(row.departsAtMs),
+    Model.clockLabel(Date.parse("2026-09-05T08:37:00Z"))
+  )
+})
+
 test("cancellations are validated, advanced, and removed after departure", () => {
   const report = Model.parseOutput(output({
     departures: [],
@@ -196,6 +266,8 @@ test("cancellations are validated, advanced, and removed after departure", () =>
         line: "158",
         headsign: "Letňany",
         platform_code: "A",
+        scheduled_at: "2026-09-05T08:01:30Z",
+        predicted_at: null,
         is_cancelled: true
       },
       boarding_point_name: "Near",
@@ -218,9 +290,10 @@ test("cancellations are validated, advanced, and removed after departure", () =>
 test("countdown labels round down conservatively", () => {
   const timestamp = new Date(2026, 0, 2, 3, 4).getTime()
   assert.equal(Model.clockLabel(timestamp), "03:04")
-  assert.equal(Model.leaveLabel(timestamp, 299), "leave by 03:04 · in 4 min")
-  assert.equal(Model.leaveLabel(timestamp, 59), "leave by 03:04 · now")
-  assert.equal(Model.departureLabel(timestamp, 659), "departs 03:04 · in 10 min")
+  assert.equal(Model.leaveLabel(299), "leave in 4 min")
+  assert.equal(Model.leaveLabel(59), "leave now")
+  assert.equal(Model.leaveClockLabel(timestamp), "leave by 03:04")
+  assert.equal(Model.departureLabel(timestamp), "departs 03:04")
   assert.equal(Model.cancellationLabel(timestamp, 659), "03:04 · in 10 min")
 })
 
@@ -249,12 +322,12 @@ test("delay labels only material late and early running", () => {
     assert.equal(Model.delayLabel(delay), expected)
   }
   assert.equal(
-    Model.departureTimingLabel(timestamp, 125, 659),
-    "departs 03:04 · in 10 min · +2 late"
+    Model.departureTimingLabel(timestamp, 125),
+    "departs 03:04 · +2 late"
   )
   assert.equal(
-    Model.departureTimingLabel(timestamp, null, 659),
-    "departs 03:04 · in 10 min"
+    Model.departureTimingLabel(timestamp, null),
+    "departs 03:04"
   )
 })
 
@@ -281,6 +354,8 @@ test("tooltip makes an all-cancelled result explicit", () => {
         line: "158",
         headsign: "Letňany",
         platform_code: "A",
+        scheduled_at: "2026-09-05T08:10:30Z",
+        predicted_at: null,
         is_cancelled: true
       },
       boarding_point_name: "Near",
@@ -293,7 +368,7 @@ test("tooltip makes an all-cancelled result explicit", () => {
   const departureTime = Date.parse("2026-09-05T08:10:30Z")
   assert.equal(Model.tooltip(report, now, "", false),
     "STALE · 158 → Letňany · " + Model.clockLabel(departureTime)
-      + " · in 10 min · cancelled")
+      + " · cancelled")
 })
 
 test("tooltip describes the nearest current departure and stale state", () => {
@@ -301,7 +376,7 @@ test("tooltip describes the nearest current departure and stale state", () => {
   const now = Date.parse("2026-09-05T08:00:30Z")
   const leaveTime = Date.parse("2026-09-05T08:04:30Z")
   assert.equal(Model.tooltip(report, now, "", false),
-    "STALE · 158 → Letňany · leave by " + Model.clockLabel(leaveTime) + " · in 4 min")
+    "STALE · 158 → Letňany · " + Model.leaveClockLabel(leaveTime))
   assert.equal(Model.updateLabel(report, now),
     "STALE · last updated " + Model.clockLabel(report.dataUpdatedAtMs) + " · 3 min ago")
   assert.equal(Model.tooltip(null, now, "command failed", false), "PID departures · command failed")
@@ -313,7 +388,7 @@ test("tooltip marks retained departures when the latest refresh failed", () => {
 
   assert.equal(
     Model.tooltip(report, now, "request failed", false),
-    "⚠ 158 → Letňany · leave by "
-      + Model.clockLabel(Date.parse("2026-09-05T08:04:30Z")) + " · in 4 min"
+    "⚠ 158 → Letňany · "
+      + Model.leaveClockLabel(Date.parse("2026-09-05T08:04:30Z"))
   )
 })
