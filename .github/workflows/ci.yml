@@ -54,6 +54,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
+      - run: bash tests/install-completions.test.sh
 
   plugin-model:
     runs-on: ubuntu-latest
