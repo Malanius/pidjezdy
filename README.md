@@ -366,8 +366,9 @@ between polls and removes a departure as soon as its leave-by time passes, so
 the displayed minutes never overpromise. Material late or early running is
 shown beside the departure clock. Cancellation notes remain until their
 would-be departure time; an all-cancelled result is also called out in the icon
-tooltip. Failed refreshes retain the previous successful result but label the
-failure, while cached CLI results keep their `STALE` label and humanised age.
+tooltip with its exact departure clock. Failed refreshes retain the previous
+successful result but label the failure, while cached CLI results keep their
+`STALE` label and humanised age.
 
 The plugin exposes three Omarchy settings:
 

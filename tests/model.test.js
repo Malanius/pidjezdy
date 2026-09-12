@@ -363,7 +363,7 @@ test("tooltip makes an all-cancelled result explicit", () => {
   const departureTime = Date.parse("2026-09-05T08:10:30Z")
   assert.equal(Model.tooltip(report, now, "", false),
     "STALE · 158 → Letňany · " + Model.clockLabel(departureTime)
-      + " · in 10 min · cancelled")
+      + " · cancelled")
 })
 
 test("tooltip describes the nearest current departure and stale state", () => {

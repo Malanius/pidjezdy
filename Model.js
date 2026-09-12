@@ -314,7 +314,7 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var cancellationPrefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) cancellationPrefix += "STALE · "
     return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · "
-      + cancellationLabel(cancellation.departsAtMs, cancellation.departsSeconds) + " · cancelled"
+      + clockLabel(cancellation.departsAtMs) + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"
