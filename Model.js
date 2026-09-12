@@ -45,6 +45,10 @@ function normalizeDeparture(value) {
   var boardingPoint = nonEmptyString(value.boarding_point_name)
   var leaveSeconds = finiteNumber(value.leave_in_seconds)
   var departsSeconds = finiteNumber(value.departs_in_seconds)
+  var scheduledAtMs = Date.parse(String(raw.scheduled_at || ""))
+  var departsAtMs = scheduledAtMs
+  if (raw.predicted_at !== null && raw.predicted_at !== undefined)
+    departsAtMs = Date.parse(String(raw.predicted_at))
   var delaySeconds = null
   if (raw.delay_seconds !== null && raw.delay_seconds !== undefined) {
     delaySeconds = finiteNumber(raw.delay_seconds)
@@ -52,15 +56,20 @@ function normalizeDeparture(value) {
     delaySeconds = delaySeconds < 0 ? Math.ceil(delaySeconds) : Math.floor(delaySeconds)
   }
   if (line === "" || headsign === "" || boardingPoint === ""
-      || leaveSeconds === null || departsSeconds === null) return null
+      || leaveSeconds === null || departsSeconds === null
+      || !isFinite(scheduledAtMs) || !isFinite(departsAtMs)) return null
+  leaveSeconds = Math.floor(leaveSeconds)
+  departsSeconds = Math.floor(departsSeconds)
   return {
     line: line,
     headsign: headsign,
     boardingPoint: boardingPoint,
     platform: nonEmptyString(raw.platform_code),
     delaySeconds: delaySeconds,
-    leaveSeconds: Math.floor(leaveSeconds),
-    departsSeconds: Math.floor(departsSeconds)
+    leaveAtMs: departsAtMs - (departsSeconds - leaveSeconds) * 1000,
+    departsAtMs: departsAtMs,
+    leaveSeconds: leaveSeconds,
+    departsSeconds: departsSeconds
   }
 }
 
@@ -161,8 +170,8 @@ function currentDepartures(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
-      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
-      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
+      leaveAtMs: row.leaveAtMs,
+      departsAtMs: row.departsAtMs,
       leaveSeconds: leaveSeconds,
       departsSeconds: row.departsSeconds - elapsed
     })
@@ -184,8 +193,8 @@ function currentCancellations(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
-      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
-      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
+      leaveAtMs: row.leaveAtMs,
+      departsAtMs: row.departsAtMs,
       leaveSeconds: row.leaveSeconds - elapsed,
       departsSeconds: departsSeconds
     })

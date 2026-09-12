@@ -15,6 +15,8 @@ function output(overrides = {}) {
         line: " 158 ",
         headsign: " Letňany ",
         platform_code: " A ",
+        scheduled_at: "2026-09-05T08:09:00Z",
+        predicted_at: "2026-09-05T08:10:30Z",
         delay_seconds: 125
       },
       boarding_point_name: " Nové Letňany ",
@@ -71,6 +73,8 @@ test("parseOutput validates and flattens the CLI envelope", () => {
     boardingPoint: "Nové Letňany",
     platform: "A",
     delaySeconds: 125,
+    leaveAtMs: Date.parse("2026-09-05T08:04:30Z"),
+    departsAtMs: Date.parse("2026-09-05T08:10:30Z"),
     leaveSeconds: 270,
     departsSeconds: 630
   })
@@ -81,6 +85,18 @@ test("parseOutput rejects malformed envelopes and records", () => {
   assert.equal(Model.parseOutput("{}").ok, false)
   assert.equal(Model.parseOutput(output({ generated_at: "never" })).ok, false)
   assert.equal(Model.parseOutput(output({ departures: [{}] })).ok, false)
+  assert.equal(Model.parseOutput(output({
+    departures: [{
+      departure: {
+        line: "158",
+        headsign: "Town",
+        scheduled_at: "invalid"
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 30,
+      departs_in_seconds: 90
+    }]
+  })).ok, false)
   assert.equal(
     Model.parseOutput(output({ cancelled: [{}] })).error,
     "pidjezdy returned an unsupported cancellation record"
@@ -165,13 +181,25 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   const report = Model.parseOutput(output({
     departures: [
       {
-        departure: { line: "158", headsign: "Letňany", platform_code: "A" },
+        departure: {
+          line: "158",
+          headsign: "Letňany",
+          platform_code: "A",
+          scheduled_at: "2026-09-05T08:06:30Z",
+          predicted_at: null
+        },
         boarding_point_name: "Near",
         leave_in_seconds: 30,
         departs_in_seconds: 390
       },
       {
-        departure: { line: "195", headsign: "Town", platform_code: null },
+        departure: {
+          line: "195",
+          headsign: "Town",
+          platform_code: null,
+          scheduled_at: "2026-09-05T08:10:00Z",
+          predicted_at: null
+        },
         boarding_point_name: "Far",
         leave_in_seconds: 120,
         departs_in_seconds: 600
@@ -188,6 +216,33 @@ test("currentDepartures advances countdowns and removes missed options", () => {
   assert.equal(rows[0].departsAtMs, Date.parse("2026-09-05T08:10:00Z"))
 })
 
+test("currentDepartures keeps exact clocks when relative seconds are truncated", () => {
+  const report = Model.parseOutput(output({
+    generated_at: "2026-09-05T08:27:00.400Z",
+    departures: [{
+      departure: {
+        line: "158",
+        headsign: "Letňany",
+        scheduled_at: "2026-09-05T08:37:00Z",
+        predicted_at: null
+      },
+      boarding_point_name: "Near",
+      leave_in_seconds: 299,
+      departs_in_seconds: 599
+    }]
+  }))
+
+  const row = Model.currentDepartures(report, report.generatedAtMs)[0]
+  assert.equal(
+    Model.clockLabel(row.leaveAtMs),
+    Model.clockLabel(Date.parse("2026-09-05T08:32:00Z"))
+  )
+  assert.equal(
+    Model.clockLabel(row.departsAtMs),
+    Model.clockLabel(Date.parse("2026-09-05T08:37:00Z"))
+  )
+})
+
 test("cancellations are validated, advanced, and removed after departure", () => {
   const report = Model.parseOutput(output({
     departures: [],
@@ -196,6 +251,8 @@ test("cancellations are validated, advanced, and removed after departure", () =>
         line: "158",
         headsign: "Letňany",
         platform_code: "A",
+        scheduled_at: "2026-09-05T08:01:30Z",
+        predicted_at: null,
         is_cancelled: true
       },
       boarding_point_name: "Near",
@@ -282,6 +339,8 @@ test("tooltip makes an all-cancelled result explicit", () => {
         line: "158",
         headsign: "Letňany",
         platform_code: "A",
+        scheduled_at: "2026-09-05T08:10:30Z",
+        predicted_at: null,
         is_cancelled: true
       },
       boarding_point_name: "Near",
