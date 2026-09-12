@@ -404,21 +404,23 @@ omarchy plugin validate .
 ```
 
 With [`just`](https://just.systems/) installed, refresh the CLI and its
-user-local Bash completion from the current checkout with:
+user-local Bash and Zsh completions from the current checkout with:
 
 ```console
 just install-local
 ```
 
 This force-installs the workspace CLI with Cargo, then atomically replaces
-`${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/pidjezdy`.
-To regenerate only the completion after a CLI change, run:
+`${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions/pidjezdy` and
+`${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions/_pidjezdy`. To
+regenerate only one completion after a CLI change, run:
 
 ```console
 just install-bash-completions
+just install-zsh-completions
 ```
 
-Neither recipe changes the pidjezdy configuration or manages the Omarchy
+These recipes do not change the pidjezdy configuration or manage the Omarchy
 plugin link. A checkout linked as described below continues to hot-reload
 plugin changes directly.
 
