@@ -86,7 +86,9 @@ pidjezdy departures
 
 Human-readable output uses aligned two-line records separated at the full
 rendered width. Leave countdowns round down conservatively, while departure
-clocks use the local timezone:
+clocks use the local timezone. The output is a point-in-time snapshot of the
+command invocation; rerun the command when current countdowns or status are
+needed:
 
 ```text
 123  City centre               leave in 4 min
