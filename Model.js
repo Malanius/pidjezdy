@@ -24,6 +24,14 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
+function shouldRefreshOnOpen(running, lastAttemptMs, nowMs) {
+  if (running) return false
+  var lastAttempt = finiteNumber(lastAttemptMs)
+  var now = finiteNumber(nowMs)
+  if (lastAttempt === null || lastAttempt <= 0) return true
+  return now !== null && now - lastAttempt >= 30000
+}
+
 function binaryPath(value) {
   return nonEmptyString(value) || "pidjezdy"
 }
@@ -317,6 +325,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    shouldRefreshOnOpen: shouldRefreshOnOpen,
     binaryPath: binaryPath,
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,

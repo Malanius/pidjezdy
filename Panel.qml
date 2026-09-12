@@ -89,7 +89,7 @@ Panel {
   function open() {
     root.controller.show()
     nowMs = Date.now()
-    refresh()
+    if (Model.shouldRefreshOnOpen(queryProcess.running, lastAttemptMs, nowMs)) refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 

@@ -49,6 +49,14 @@ test("settings are parsed and bounded defensively", () => {
   assert.equal(Model.binaryPath(" /opt/pidjezdy/bin/pidjezdy "), "/opt/pidjezdy/bin/pidjezdy")
 })
 
+test("popup-open refreshes respect the polling floor", () => {
+  const now = Date.parse("2026-09-05T08:00:30Z")
+  assert.equal(Model.shouldRefreshOnOpen(false, 0, now), true)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 29999, now), false)
+  assert.equal(Model.shouldRefreshOnOpen(false, now - 30000, now), true)
+  assert.equal(Model.shouldRefreshOnOpen(true, now - 30000, now), false)
+})
+
 test("process errors distinguish failed launches from failed runs", () => {
   assert.equal(Model.exitError(7), "pidjezdy exited with status 7")
   assert.equal(
