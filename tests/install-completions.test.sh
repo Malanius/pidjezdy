@@ -12,21 +12,28 @@ printf '#!/usr/bin/env bash\nprintf "partial output\\n"\nexit 1\n' >"$failure_bi
 chmod +x "$success_bin" "$failure_bin"
 
 export XDG_DATA_HOME="$test_root/data"
-export PIDJEZDY_COMPLETION_BIN="$success_bin"
-scripts/install-completions.sh zsh
 
-completion="$XDG_DATA_HOME/zsh/site-functions/_pidjezdy"
-[[ $(<"$completion") == "generated for zsh" ]]
+check_installation() {
+  local shell=$1
+  local completion=$2
 
-printf 'existing completion\n' >"$completion"
-export PIDJEZDY_COMPLETION_BIN="$failure_bin"
-if scripts/install-completions.sh zsh; then
-  printf 'expected completion generation to fail\n' >&2
-  exit 1
-fi
+  export PIDJEZDY_COMPLETION_BIN="$success_bin"
+  scripts/install-completions.sh "$shell"
+  [[ $(<"$completion") == "generated for $shell" ]]
 
-[[ $(<"$completion") == "existing completion" ]]
-if compgen -G "$XDG_DATA_HOME/zsh/site-functions/.pidjezdy.*" >/dev/null; then
-  printf 'temporary completion file was not removed\n' >&2
-  exit 1
-fi
+  printf 'existing completion\n' >"$completion"
+  export PIDJEZDY_COMPLETION_BIN="$failure_bin"
+  if scripts/install-completions.sh "$shell"; then
+    printf 'expected %s completion generation to fail\n' "$shell" >&2
+    exit 1
+  fi
+
+  [[ $(<"$completion") == "existing completion" ]]
+  if compgen -G "${completion%/*}/.pidjezdy.*" >/dev/null; then
+    printf 'temporary %s completion file was not removed\n' "$shell" >&2
+    exit 1
+  fi
+}
+
+check_installation bash "$XDG_DATA_HOME/bash-completion/completions/pidjezdy"
+check_installation zsh "$XDG_DATA_HOME/zsh/site-functions/_pidjezdy"
