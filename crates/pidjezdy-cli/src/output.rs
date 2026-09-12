@@ -606,10 +606,10 @@ mod tests {
 
         write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
 
-        assert!(
-            String::from_utf8(output)
-                .unwrap()
-                .contains("departs 12:10 · +2 late")
+        let expected = format!(
+            "departs {} · +2 late",
+            local_clock(selected().departure.effective_at())
         );
+        assert!(String::from_utf8(output).unwrap().contains(&expected));
     }
 }
