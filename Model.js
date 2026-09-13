@@ -24,6 +24,21 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
+function openRefreshMinimumAge(report, errorMessage, refreshIntervalMs) {
+  return !report || report.stale === true || nonEmptyString(errorMessage) !== ""
+    ? 5000
+    : refreshIntervalMs
+}
+
+function shouldRefreshOnOpen(queryPending, lastAttemptMs, nowMs, minimumAgeMs) {
+  if (queryPending) return false
+  var lastAttempt = finiteNumber(lastAttemptMs)
+  var now = finiteNumber(nowMs)
+  var minimumAge = finiteNumber(minimumAgeMs)
+  if (lastAttempt === null || lastAttempt <= 0) return true
+  return now !== null && minimumAge !== null && now - lastAttempt >= minimumAge
+}
+
 function binaryPath(value) {
   return nonEmptyString(value) || "pidjezdy"
 }
@@ -45,6 +60,10 @@ function normalizeDeparture(value) {
   var boardingPoint = nonEmptyString(value.boarding_point_name)
   var leaveSeconds = finiteNumber(value.leave_in_seconds)
   var departsSeconds = finiteNumber(value.departs_in_seconds)
+  var scheduledAtMs = Date.parse(String(raw.scheduled_at || ""))
+  var departsAtMs = scheduledAtMs
+  if (raw.predicted_at !== null && raw.predicted_at !== undefined)
+    departsAtMs = Date.parse(String(raw.predicted_at))
   var delaySeconds = null
   if (raw.delay_seconds !== null && raw.delay_seconds !== undefined) {
     delaySeconds = finiteNumber(raw.delay_seconds)
@@ -52,15 +71,20 @@ function normalizeDeparture(value) {
     delaySeconds = delaySeconds < 0 ? Math.ceil(delaySeconds) : Math.floor(delaySeconds)
   }
   if (line === "" || headsign === "" || boardingPoint === ""
-      || leaveSeconds === null || departsSeconds === null) return null
+      || leaveSeconds === null || departsSeconds === null
+      || !isFinite(scheduledAtMs) || !isFinite(departsAtMs)) return null
+  leaveSeconds = Math.floor(leaveSeconds)
+  departsSeconds = Math.floor(departsSeconds)
   return {
     line: line,
     headsign: headsign,
     boardingPoint: boardingPoint,
     platform: nonEmptyString(raw.platform_code),
     delaySeconds: delaySeconds,
-    leaveSeconds: Math.floor(leaveSeconds),
-    departsSeconds: Math.floor(departsSeconds)
+    leaveAtMs: departsAtMs - (departsSeconds - leaveSeconds) * 1000,
+    departsAtMs: departsAtMs,
+    leaveSeconds: leaveSeconds,
+    departsSeconds: departsSeconds
   }
 }
 
@@ -161,8 +185,8 @@ function currentDepartures(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
-      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
-      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
+      leaveAtMs: row.leaveAtMs,
+      departsAtMs: row.departsAtMs,
       leaveSeconds: leaveSeconds,
       departsSeconds: row.departsSeconds - elapsed
     })
@@ -184,8 +208,8 @@ function currentCancellations(report, nowMs) {
       boardingPoint: row.boardingPoint,
       platform: row.platform,
       delaySeconds: row.delaySeconds,
-      leaveAtMs: report.generatedAtMs + row.leaveSeconds * 1000,
-      departsAtMs: report.generatedAtMs + row.departsSeconds * 1000,
+      leaveAtMs: row.leaveAtMs,
+      departsAtMs: row.departsAtMs,
       leaveSeconds: row.leaveSeconds - elapsed,
       departsSeconds: departsSeconds
     })
@@ -204,14 +228,17 @@ function clockLabel(timestampMs) {
     + ":" + String(date.getMinutes()).padStart(2, "0")
 }
 
-function leaveLabel(timestampMs, seconds) {
+function leaveLabel(seconds) {
   var minutes = wholeMinutes(seconds)
-  return "leave by " + clockLabel(timestampMs) + " · "
-    + (minutes === 0 ? "now" : "in " + minutes + " min")
+  return minutes === 0 ? "leave now" : "leave in " + minutes + " min"
 }
 
-function departureLabel(timestampMs, seconds) {
-  return "departs " + clockLabel(timestampMs) + " · in " + wholeMinutes(seconds) + " min"
+function leaveClockLabel(timestampMs) {
+  return "leave by " + clockLabel(timestampMs)
+}
+
+function departureLabel(timestampMs) {
+  return "departs " + clockLabel(timestampMs)
 }
 
 function delayLabel(delaySeconds) {
@@ -223,9 +250,9 @@ function delayLabel(delaySeconds) {
   return ""
 }
 
-function departureTimingLabel(timestampMs, delaySeconds, departsSeconds) {
+function departureTimingLabel(timestampMs, delaySeconds) {
   var delay = delayLabel(delaySeconds)
-  return departureLabel(timestampMs, departsSeconds) + (delay ? " · " + delay : "")
+  return departureLabel(timestampMs) + (delay ? " · " + delay : "")
 }
 
 function cancellationLabel(timestampMs, seconds) {
@@ -286,14 +313,14 @@ function tooltip(report, nowMs, errorMessage, loading) {
     var prefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) prefix += "STALE · "
     return prefix + first.line + " → " + first.headsign + " · "
-      + leaveLabel(first.leaveAtMs, first.leaveSeconds)
+      + leaveClockLabel(first.leaveAtMs)
   }
   if (cancellations.length > 0) {
     var cancellation = cancellations[0]
     var cancellationPrefix = errorMessage ? "⚠ " : ""
     if (report && report.stale) cancellationPrefix += "STALE · "
     return cancellationPrefix + cancellation.line + " → " + cancellation.headsign + " · "
-      + cancellationLabel(cancellation.departsAtMs, cancellation.departsSeconds) + " · cancelled"
+      + clockLabel(cancellation.departsAtMs) + " · cancelled"
   }
   if (errorMessage) return "PID departures · " + errorMessage
   if (loading) return "PID departures · updating…"
@@ -305,6 +332,8 @@ if (typeof module !== "undefined" && module && module.exports) {
     boundedInteger: boundedInteger,
     refreshInterval: refreshInterval,
     departureLimit: departureLimit,
+    openRefreshMinimumAge: openRefreshMinimumAge,
+    shouldRefreshOnOpen: shouldRefreshOnOpen,
     binaryPath: binaryPath,
     maxDisplayDepartures: MAX_DISPLAY_DEPARTURES,
     expectedSchemaVersion: EXPECTED_SCHEMA_VERSION,
@@ -317,6 +346,7 @@ if (typeof module !== "undefined" && module && module.exports) {
     wholeMinutes: wholeMinutes,
     clockLabel: clockLabel,
     leaveLabel: leaveLabel,
+    leaveClockLabel: leaveClockLabel,
     departureLabel: departureLabel,
     delayLabel: delayLabel,
     departureTimingLabel: departureTimingLabel,

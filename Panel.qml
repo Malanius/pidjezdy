@@ -26,6 +26,7 @@ Panel {
   readonly property int requestedLimit: Model.departureLimit(setting("limit", 3))
 
   property bool ready: false
+  property bool queryPending: false
   property bool refreshQueued: false
   property string stdoutText: ""
   property string stderrText: ""
@@ -38,17 +39,19 @@ Panel {
   readonly property var departures: Model.currentDepartures(report, nowMs)
   readonly property var cancellations: Model.currentCancellations(report, nowMs)
   readonly property bool stale: report ? report.stale === true : false
-  readonly property bool loading: queryProcess.running
+  readonly property bool loading: queryPending
 
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   function refresh() {
-    if (queryProcess.running) {
+    if (queryPending) {
       refreshQueued = true
       return
     }
+    queryProcess.startedSuccessfully = false
+    queryPending = true
     stdoutText = ""
     stderrText = ""
     queryProcess.command = [
@@ -60,8 +63,12 @@ Panel {
   }
 
   function finishQuery(exitCode) {
+    if (!queryPending) return
+    queryPending = false
+    queryProcess.startedSuccessfully = false
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
+    refreshTimer.restart()
     var parsed = Model.parseOutput(stdoutText)
     var message = ""
     var detail = ""
@@ -89,7 +96,17 @@ Panel {
   function open() {
     root.controller.show()
     nowMs = Date.now()
-    if (!report || errorMessage !== "") refresh()
+    var minimumAgeMs = Model.openRefreshMinimumAge(
+      report,
+      errorMessage,
+      refreshIntervalSec * 1000
+    )
+    if (Model.shouldRefreshOnOpen(
+        queryPending,
+        lastAttemptMs,
+        nowMs,
+        minimumAgeMs
+    )) refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -131,7 +148,19 @@ Panel {
 
   Process {
     id: queryProcess
+    property bool startedSuccessfully: false
     running: false
+
+    onStarted: startedSuccessfully = true
+
+    onRunningChanged: {
+      if (!running && root.queryPending && !startedSuccessfully) {
+        Qt.callLater(function() {
+          if (root.queryPending && !queryProcess.startedSuccessfully)
+            root.finishQuery(-1)
+        })
+      }
+    }
 
     onExited: function(exitCode) {
       // Let waitForEnd collectors publish their final text first.
@@ -327,7 +356,7 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     text: modelData.boardingPoint
-                      + (modelData.platform ? " · platform " + modelData.platform : "")
+                      + (modelData.platform ? " · P" + modelData.platform : "")
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -341,7 +370,7 @@ Panel {
                   Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                   Text {
-                    text: Model.leaveLabel(modelData.leaveAtMs, modelData.leaveSeconds)
+                    text: Model.leaveLabel(modelData.leaveSeconds)
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
@@ -353,8 +382,7 @@ Panel {
                   Text {
                     text: Model.departureTimingLabel(
                       modelData.departsAtMs,
-                      modelData.delaySeconds,
-                      modelData.departsSeconds
+                      modelData.delaySeconds
                     )
                     color: root.dim
                     font.family: root.fontFamily
