@@ -30,8 +30,8 @@ function openRefreshMinimumAge(report, errorMessage, refreshIntervalMs) {
     : refreshIntervalMs
 }
 
-function shouldRefreshOnOpen(running, lastAttemptMs, nowMs, minimumAgeMs) {
-  if (running) return false
+function shouldRefreshOnOpen(queryPending, lastAttemptMs, nowMs, minimumAgeMs) {
+  if (queryPending) return false
   var lastAttempt = finiteNumber(lastAttemptMs)
   var now = finiteNumber(nowMs)
   var minimumAge = finiteNumber(minimumAgeMs)

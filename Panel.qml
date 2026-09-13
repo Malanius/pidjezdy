@@ -26,6 +26,7 @@ Panel {
   readonly property int requestedLimit: Model.departureLimit(setting("limit", 3))
 
   property bool ready: false
+  property bool queryPending: false
   property bool refreshQueued: false
   property string stdoutText: ""
   property string stderrText: ""
@@ -38,17 +39,18 @@ Panel {
   readonly property var departures: Model.currentDepartures(report, nowMs)
   readonly property var cancellations: Model.currentCancellations(report, nowMs)
   readonly property bool stale: report ? report.stale === true : false
-  readonly property bool loading: queryProcess.running
+  readonly property bool loading: queryPending
 
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
   function refresh() {
-    if (queryProcess.running) {
+    if (queryPending) {
       refreshQueued = true
       return
     }
+    queryPending = true
     stdoutText = ""
     stderrText = ""
     queryProcess.command = [
@@ -80,6 +82,7 @@ Panel {
     }
     errorMessage = message
     errorDetail = detail || message
+    queryPending = false
 
     if (refreshQueued) {
       refreshQueued = false
@@ -96,7 +99,7 @@ Panel {
       refreshIntervalSec * 1000
     )
     if (Model.shouldRefreshOnOpen(
-        queryProcess.running,
+        queryPending,
         lastAttemptMs,
         nowMs,
         minimumAgeMs
