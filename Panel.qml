@@ -50,6 +50,7 @@ Panel {
       refreshQueued = true
       return
     }
+    queryProcess.startedSuccessfully = false
     queryPending = true
     stdoutText = ""
     stderrText = ""
@@ -62,6 +63,9 @@ Panel {
   }
 
   function finishQuery(exitCode) {
+    if (!queryPending) return
+    queryPending = false
+    queryProcess.startedSuccessfully = false
     lastAttemptMs = Date.now()
     nowMs = lastAttemptMs
     refreshTimer.restart()
@@ -82,7 +86,6 @@ Panel {
     }
     errorMessage = message
     errorDetail = detail || message
-    queryPending = false
 
     if (refreshQueued) {
       refreshQueued = false
@@ -145,7 +148,19 @@ Panel {
 
   Process {
     id: queryProcess
+    property bool startedSuccessfully: false
     running: false
+
+    onStarted: startedSuccessfully = true
+
+    onRunningChanged: {
+      if (!running && root.queryPending && !startedSuccessfully) {
+        Qt.callLater(function() {
+          if (root.queryPending && !queryProcess.startedSuccessfully)
+            root.finishQuery(-1)
+        })
+      }
+    }
 
     onExited: function(exitCode) {
       // Let waitForEnd collectors publish their final text first.
