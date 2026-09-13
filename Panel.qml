@@ -91,7 +91,7 @@ Panel {
     root.controller.show()
     nowMs = Date.now()
     var minimumAgeMs = Model.openRefreshMinimumAge(
-      report !== null,
+      report,
       errorMessage,
       refreshIntervalSec * 1000
     )

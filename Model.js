@@ -24,8 +24,10 @@ function departureLimit(value) {
   return boundedInteger(value, 3, 1, MAX_DISPLAY_DEPARTURES)
 }
 
-function openRefreshMinimumAge(hasReport, errorMessage, refreshIntervalMs) {
-  return !hasReport || nonEmptyString(errorMessage) !== "" ? 5000 : refreshIntervalMs
+function openRefreshMinimumAge(report, errorMessage, refreshIntervalMs) {
+  return !report || report.stale === true || nonEmptyString(errorMessage) !== ""
+    ? 5000
+    : refreshIntervalMs
 }
 
 function shouldRefreshOnOpen(running, lastAttemptMs, nowMs, minimumAgeMs) {
