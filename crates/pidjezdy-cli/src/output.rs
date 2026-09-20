@@ -278,7 +278,7 @@ impl<'a> From<&'a SelectedDeparture> for TextRow<'a> {
             .as_deref()
             .map(str::trim)
             .filter(|code| !code.is_empty())
-            .map_or_else(String::new, |code| format!(" · P{code}"));
+            .map_or_else(String::new, |code| format!(" · Pl. {code}"));
         let leave = if selected.leave_in_minutes() == 0 {
             "leave now".to_owned()
         } else {
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(lines.len(), 2);
         assert!(lines[0].starts_with("158  Centre"));
         assert!(lines[0].ends_with("leave in 4 min"));
-        assert!(lines[1].starts_with("     Nearby stop · P2"));
+        assert!(lines[1].starts_with("     Nearby stop · Pl. 2"));
         assert!(lines[1].ends_with(&format!(
             "departs {}",
             local_clock(selected().departure.effective_at())
