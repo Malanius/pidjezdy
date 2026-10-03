@@ -417,7 +417,7 @@ mod tests {
 
         let selection = select_departures(&configured, &departures, now(), options(2));
 
-        assert!(selection.departures.is_empty());
+        assert_eq!(selection.departures, Vec::new());
         assert_eq!(trip_ids(&selection.cancelled), ["first", "second"]);
     }
 
@@ -434,7 +434,7 @@ mod tests {
             options(3),
         );
 
-        assert!(selection.departures.is_empty());
+        assert_eq!(selection.departures, Vec::new());
         assert_eq!(trip_ids(&selection.cancelled), ["cancelled"]);
     }
 
@@ -446,8 +446,8 @@ mod tests {
 
         let selection = select_departures(&configured, &[cancelled], now(), options(3));
 
-        assert!(selection.departures.is_empty());
-        assert!(selection.cancelled.is_empty());
+        assert_eq!(selection.departures, Vec::new());
+        assert_eq!(selection.cancelled, Vec::new());
     }
 
     #[test]
