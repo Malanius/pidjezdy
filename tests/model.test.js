@@ -317,17 +317,17 @@ test("delay labels only material late and early running", () => {
     [null, ""],
     [0, ""],
     [59, ""],
-    [60, "+1 late"],
-    [125, "+2 late"],
+    [60, "+1m late"],
+    [125, "+2m late"],
     [-59, ""],
-    [-60, "-1 early"],
-    [-125, "-2 early"]
+    [-60, "-1m early"],
+    [-125, "-2m early"]
   ]) {
     assert.equal(Model.delayLabel(delay), expected)
   }
   assert.equal(
     Model.departureTimingLabel(timestamp, 125),
-    "departs 03:04 · +2 late"
+    "departs 03:04 · +2m late"
   )
   assert.equal(
     Model.departureTimingLabel(timestamp, null),

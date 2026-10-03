@@ -95,7 +95,7 @@ needed:
      Nearby stop · Pl. A            departs 08:37
 ─────────────────────────────────────────────────
 456  Main station                  leave in 8 min
-     Other stop · Pl. C   departs 08:43 · +2 late
+     Other stop · Pl. C  departs 08:43 · +2m late
 ─────────────────────────────────────────────────
 cancelled: 123 → City centre from Nearby stop, 08:42 · in 15 min
 ```
@@ -118,8 +118,8 @@ disabled by setting [`NO_COLOR`](https://no-color.org/). JSON output never
 contains terminal styling.
 
 Known delays of at least 60 seconds are shown in whole minutes after the
-departure time, for example `departs 08:43 · +2 late`. Trips running
-early by at least 60 seconds are shown as `-N early`; smaller differences and
+departure time, for example `departs 08:43 · +2m late`. Trips running
+early by at least 60 seconds are shown as `-Nm early`; smaller differences and
 departures without delay information are left unmarked. The leave countdown
 and departure clock already use the predicted time when present.
 
