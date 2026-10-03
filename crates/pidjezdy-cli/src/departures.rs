@@ -22,7 +22,7 @@ pub(crate) enum DepartureWarning {
     #[error(transparent)]
     CacheWrite(#[from] CacheWriteError),
     #[error(
-        "{boarding_point_name:?} returned the API limit of {count} departures; later matching departures may be missing. Latest returned departure is in {latest_departure_minutes} minutes; requested window is {requested_minutes} minutes"
+        "{boarding_point_name:?} returned the {count}-departure API limit; later matching departures may be missing. Latest returned departure is in {latest_departure_minutes} min; requested window is {requested_minutes} min"
     )]
     ApiLimitReached {
         boarding_point_name: String,
@@ -420,8 +420,8 @@ mod tests {
         assert_eq!(
             result.warnings[0].to_string(),
             concat!(
-                "\"Nearby stop\" returned the API limit of 3 departures; later matching departures may be missing. ",
-                "Latest returned departure is in 27 minutes; requested window is 120 minutes"
+                "\"Nearby stop\" returned the 3-departure API limit; later matching departures may be missing. ",
+                "Latest returned departure is in 27 min; requested window is 120 min"
             )
         );
     }
@@ -461,6 +461,23 @@ mod tests {
             result.warnings[0]
                 .to_string()
                 .contains("later matching departures may be missing")
+        );
+    }
+
+    #[test]
+    fn api_limit_warning_uses_invariant_units_for_singular_values() {
+        let warning = DepartureWarning::ApiLimitReached {
+            boarding_point_name: "Nearby stop".into(),
+            count: 1,
+            latest_departure_minutes: 1,
+            requested_minutes: 1,
+        };
+        assert_eq!(
+            warning.to_string(),
+            concat!(
+                "\"Nearby stop\" returned the 1-departure API limit; later matching departures may be missing. ",
+                "Latest returned departure is in 1 min; requested window is 1 min"
+            )
         );
     }
 

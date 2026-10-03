@@ -358,12 +358,12 @@ fn short_capped_response_warns_on_stderr() {
     let diagnostics = String::from_utf8(output.stderr).unwrap();
     assert!(
         diagnostics.starts_with(
-            "pidjezdy: warning: \"Nearby stop\" returned the API limit of 3 departures; later matching departures may be missing. Latest returned departure is in "
+            "pidjezdy: warning: \"Nearby stop\" returned the 3-departure API limit; later matching departures may be missing. Latest returned departure is in "
         ),
         "{diagnostics}"
     );
     assert!(
-        diagnostics.ends_with(" minutes; requested window is 120 minutes\n"),
+        diagnostics.ends_with(" min; requested window is 120 min\n"),
         "{diagnostics}"
     );
 }

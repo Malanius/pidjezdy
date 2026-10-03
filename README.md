@@ -157,7 +157,7 @@ still cannot fill the requested display slots, the CLI warns on stderr with
 the affected point and the time until its latest returned departure:
 
 ```text
-pidjezdy: warning: "Nearby stop" returned the API limit of 20 departures; later matching departures may be missing. Latest returned departure is in 27 minutes; requested window is 120 minutes
+pidjezdy: warning: "Nearby stop" returned the 20-departure API limit; later matching departures may be missing. Latest returned departure is in 27 min; requested window is 120 min
 ```
 
 Returning exactly the API limit does not prove that PID omitted departures.
