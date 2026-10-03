@@ -245,8 +245,8 @@ function delayLabel(delaySeconds) {
   if (delaySeconds === null || delaySeconds === undefined || !isFinite(Number(delaySeconds)))
     return ""
   var delay = Number(delaySeconds)
-  if (delay >= 60) return "+" + Math.floor(delay / 60) + " late"
-  if (delay <= -60) return "-" + Math.floor(Math.abs(delay) / 60) + " early"
+  if (delay >= 60) return "+" + Math.floor(delay / 60) + "m late"
+  if (delay <= -60) return "-" + Math.floor(Math.abs(delay) / 60) + "m early"
   return ""
 }
 

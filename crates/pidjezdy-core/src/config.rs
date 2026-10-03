@@ -347,7 +347,7 @@ mod tests {
     fn parses_defaults() {
         let config = Config::from_toml(VALID).unwrap();
         assert_eq!(config.display.max_departures, 3);
-        assert!(config.display.route_quotas.is_empty());
+        assert_eq!(config.display.route_quotas, Vec::new());
         assert_eq!(config.fetch.minutes_after, 120);
         assert_eq!(config.fetch.api_limit, 20);
         assert_eq!(config.boarding_points[0].safety_buffer_minutes, 2);

@@ -254,9 +254,9 @@ fn local_clock(timestamp: DateTime<Utc>) -> String {
 fn delay_label(delay_seconds: Option<i64>) -> Option<String> {
     let delay_seconds = delay_seconds?;
     if delay_seconds >= 60 {
-        Some(format!("+{} late", delay_seconds / 60))
+        Some(format!("+{}m late", delay_seconds / 60))
     } else if delay_seconds <= -60 {
-        Some(format!("-{} early", delay_seconds.unsigned_abs() / 60))
+        Some(format!("-{}m early", delay_seconds.unsigned_abs() / 60))
     } else {
         None
     }
@@ -588,11 +588,11 @@ mod tests {
             (None, None),
             (Some(0), None),
             (Some(59), None),
-            (Some(60), Some("+1 late")),
-            (Some(125), Some("+2 late")),
+            (Some(60), Some("+1m late")),
+            (Some(125), Some("+2m late")),
             (Some(-59), None),
-            (Some(-60), Some("-1 early")),
-            (Some(-125), Some("-2 early")),
+            (Some(-60), Some("-1m early")),
+            (Some(-125), Some("-2m early")),
         ] {
             assert_eq!(delay_label(delay).as_deref(), expected);
         }
@@ -608,7 +608,7 @@ mod tests {
         write_departures(&mut output, OutputFormat::Text, &query, false).unwrap();
 
         let expected = format!(
-            "departs {} · +2 late",
+            "departs {} · +2m late",
             local_clock(selected().departure.effective_at())
         );
         assert!(String::from_utf8(output).unwrap().contains(&expected));

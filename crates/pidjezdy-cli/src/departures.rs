@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(result.data_updated_at, cached_at);
         assert_eq!(result.departures.len(), 1);
         assert_eq!(result.departures[0].leave_in_seconds, 4 * 60);
-        assert!(result.warnings.is_empty());
+        assert!(matches!(result.warnings.as_slice(), []));
     }
 
     #[test]
@@ -512,7 +512,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.departures.len(), 3);
-        assert!(result.warnings.is_empty());
+        assert!(matches!(result.warnings.as_slice(), []));
     }
 
     #[test]
@@ -538,7 +538,7 @@ mod tests {
 
         assert!(result.stale);
         assert_eq!(result.departures.len(), 1);
-        assert!(result.warnings.is_empty());
+        assert!(matches!(result.warnings.as_slice(), []));
     }
 
     #[test]
@@ -559,8 +559,8 @@ mod tests {
 
         assert!(!result.stale);
         assert_eq!(result.data_updated_at, now());
-        assert!(result.departures.is_empty());
-        assert!(result.warnings.is_empty());
+        assert_eq!(result.departures, Vec::new());
+        assert!(matches!(result.warnings.as_slice(), []));
     }
 
     #[test]
