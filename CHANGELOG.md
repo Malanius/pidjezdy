@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/Malanius/pidjezdy/compare/v0.1.0...v0.2.0) (2026-10-03)
+
+
+### Features
+
+* compact departure timing labels ([#94](https://github.com/Malanius/pidjezdy/issues/94)) ([017cee5](https://github.com/Malanius/pidjezdy/commit/017cee5cf2b74e4ded7d63496f6757de0d23edab))
+* install zsh completions with just ([#92](https://github.com/Malanius/pidjezdy/issues/92)) ([bc22feb](https://github.com/Malanius/pidjezdy/commit/bc22febb4d30c45c88fbe0091bb989ff99bf0ac8))
+
+
+### Bug Fixes
+
+* clarify compact platform labels ([#96](https://github.com/Malanius/pidjezdy/issues/96)) ([2bc5654](https://github.com/Malanius/pidjezdy/commit/2bc5654c9d5dc1bb5ff0dd7d5b3f3e47f309f1cb))
+* **cli:** qualify API-limit warnings ([#100](https://github.com/Malanius/pidjezdy/issues/100)) ([6092609](https://github.com/Malanius/pidjezdy/commit/6092609766bad2002c08e2c42281a364f97b26b8))
+* label departure delay minutes ([#99](https://github.com/Malanius/pidjezdy/issues/99)) ([af63437](https://github.com/Malanius/pidjezdy/commit/af634378799804fb9bb8cb6e3d893600020decf1))
+
 ## 0.1.0 (2026-09-09)
 
 
