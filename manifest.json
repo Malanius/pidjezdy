@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "malanius.pidjezdy",
   "name": "PID Departures",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Malanius",
   "license": "MIT",
   "description": "Reachable PID departures in the Omarchy bar",
