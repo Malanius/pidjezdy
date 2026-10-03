@@ -550,8 +550,8 @@ mod tests {
         .map(ToString::to_string)
         .collect::<Vec<_>>();
 
-        assert!(output.is_empty());
-        assert!(diagnostics.is_empty());
+        assert_eq!(output.as_slice(), b"");
+        assert_eq!(diagnostics.as_slice(), b"");
         let expected =
             format!("PID API limit must be between 1 and {MAX_API_LIMIT}, got {invalid_limit}");
         assert!(causes.iter().any(|cause| cause == &expected), "{causes:?}");
@@ -592,7 +592,7 @@ mod tests {
         let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
 
         assert!(failure.json_reported());
-        assert!(diagnostics.is_empty());
+        assert_eq!(diagnostics.as_slice(), b"");
         let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
         assert_eq!(document["schema_version"], output::JSON_SCHEMA_VERSION);
         assert_eq!(document["error"]["kind"], "config_invalid");
@@ -622,8 +622,8 @@ mod tests {
         let failure = run(cli, None, None, false, &mut output, &mut diagnostics).unwrap_err();
 
         assert!(!failure.json_reported());
-        assert!(output.is_empty());
-        assert!(diagnostics.is_empty());
+        assert_eq!(output.as_slice(), b"");
+        assert_eq!(diagnostics.as_slice(), b"");
     }
 
     #[test]
@@ -647,7 +647,7 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("pidjezdy"));
         assert!(output.contains("departures"));
-        assert!(diagnostics.is_empty());
+        assert_eq!(diagnostics.as_slice(), b"");
     }
 
     #[test]

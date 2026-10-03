@@ -261,7 +261,7 @@ fn json_happy_path_exercises_the_complete_binary() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(document["schema_version"], 2);
     assert_eq!(document["stale"], false);
@@ -322,7 +322,7 @@ fn text_happy_path_is_aligned_and_unstyled_when_piped() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(!text.contains('\u{1b}'));
     let lines = text.lines().collect::<Vec<_>>();
@@ -385,7 +385,7 @@ fn structured_api_error_is_a_json_failure_document() {
     server.finish();
 
     assert!(!output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(document["schema_version"], 2);
     assert_eq!(document["error"]["kind"], "departures_unavailable");
@@ -476,7 +476,10 @@ fn empty_success_does_not_destroy_the_network_fallback() {
     assert!(empty.status.success());
     let empty: serde_json::Value = serde_json::from_slice(&empty.stdout).unwrap();
     assert_eq!(empty["stale"], false);
-    assert!(empty["departures"].as_array().unwrap().is_empty());
+    assert!(matches!(
+        empty["departures"].as_array().unwrap().as_slice(),
+        []
+    ));
 
     let disconnect = disconnect_once();
     let fallback = command(
@@ -511,7 +514,7 @@ fn network_and_cache_failure_reports_both_causes() {
     disconnect.finish();
 
     assert!(!output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(document["error"]["kind"], "departures_unavailable");
     let causes = document["error"]["causes"]
@@ -543,7 +546,7 @@ fn invalid_configuration_lists_validation_errors() {
     );
 
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout.as_slice(), b"");
     let diagnostics = String::from_utf8(output.stderr).unwrap();
     assert!(
         diagnostics.contains("invalid configuration"),
@@ -567,7 +570,7 @@ fn config_check_rejects_a_limit_above_the_pid_api_cap() {
         .unwrap();
 
     assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
+    assert_eq!(output.stdout.as_slice(), b"");
     let diagnostics = String::from_utf8(output.stderr).unwrap();
     assert!(
         diagnostics.contains("could not build PID departure request"),
@@ -598,7 +601,7 @@ fn cache_path_does_not_require_valid_configuration() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr.as_slice(), b"");
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         format!("{}\n", cache_path(directory.path()).display())
@@ -621,7 +624,7 @@ fn cache_clear_removes_a_snapshot_and_accepts_an_absent_cache() {
         "{}",
         String::from_utf8_lossy(&removed.stderr)
     );
-    assert!(removed.stderr.is_empty());
+    assert_eq!(removed.stderr.as_slice(), b"");
     assert_eq!(
         String::from_utf8(removed.stdout).unwrap(),
         format!("removed {}\n", cache.display())
@@ -637,7 +640,7 @@ fn cache_clear_removes_a_snapshot_and_accepts_an_absent_cache() {
         "{}",
         String::from_utf8_lossy(&absent.stderr)
     );
-    assert!(absent.stderr.is_empty());
+    assert_eq!(absent.stderr.as_slice(), b"");
     assert_eq!(
         String::from_utf8(absent.stdout).unwrap(),
         format!("no cache file at {}\n", cache.display())
