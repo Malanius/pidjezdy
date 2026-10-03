@@ -22,12 +22,12 @@ pub(crate) enum DepartureWarning {
     #[error(transparent)]
     CacheWrite(#[from] CacheWriteError),
     #[error(
-        "{boarding_point_name:?} hit the {count}-departure API limit, covering only the next {covered_minutes} of {requested_minutes} requested minutes; matching departures beyond that are not visible"
+        "{boarding_point_name:?} returned the API limit of {count} departures; later matching departures may be missing. Latest returned departure is in {latest_departure_minutes} minutes; requested window is {requested_minutes} minutes"
     )]
-    ApiLimitTruncated {
+    ApiLimitReached {
         boarding_point_name: String,
         count: usize,
-        covered_minutes: i64,
+        latest_departure_minutes: i64,
         requested_minutes: u32,
     },
 }
@@ -171,10 +171,10 @@ fn api_limit_warnings(
                 );
             }
             (count != 0 && count == config.fetch.api_limit).then(|| {
-                DepartureWarning::ApiLimitTruncated {
+                DepartureWarning::ApiLimitReached {
                     boarding_point_name: point.name.clone(),
                     count,
-                    covered_minutes: latest
+                    latest_departure_minutes: latest
                         .map_or(0, |latest| (latest - generated_at).num_minutes().max(0)),
                     requested_minutes: config.fetch.minutes_after,
                 }
@@ -410,19 +410,57 @@ mod tests {
         assert_eq!(result.departures.len(), 1);
         assert!(matches!(
             result.warnings.as_slice(),
-            [DepartureWarning::ApiLimitTruncated {
+            [DepartureWarning::ApiLimitReached {
                 boarding_point_name,
                 count: 3,
-                covered_minutes: 27,
+                latest_departure_minutes: 27,
                 requested_minutes: 120,
             }] if boarding_point_name == "Nearby stop"
         ));
         assert_eq!(
             result.warnings[0].to_string(),
             concat!(
-                "\"Nearby stop\" hit the 3-departure API limit, covering only the next ",
-                "27 of 120 requested minutes; matching departures beyond that are not visible"
+                "\"Nearby stop\" returned the API limit of 3 departures; later matching departures may be missing. ",
+                "Latest returned departure is in 27 minutes; requested window is 120 minutes"
             )
+        );
+    }
+
+    #[test]
+    fn complete_window_at_the_api_limit_still_warns_about_possible_missing_departures() {
+        // These are all departures in the window. A capped response provides no
+        // way to distinguish this complete board from a truncated one.
+        let departures = vec![
+            departure_at("matching", "158", "Centre", 10),
+            departure_at("other-1", "900", "Elsewhere", 60),
+            departure_at("other-2", "901", "Elsewhere", 120),
+        ];
+        let result = finish_query_with(
+            &capped_config(),
+            3,
+            now(),
+            QuerySources {
+                live: Ok(departures),
+                write_cache: |_: &[Departure]| Ok(()),
+                read_cache: || unreachable!("a successful live request must not read the cache"),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.departures.len(), 1);
+        assert!(matches!(
+            result.warnings.as_slice(),
+            [DepartureWarning::ApiLimitReached {
+                count: 3,
+                latest_departure_minutes: 120,
+                requested_minutes: 120,
+                ..
+            }]
+        ));
+        assert!(
+            result.warnings[0]
+                .to_string()
+                .contains("later matching departures may be missing")
         );
     }
 
@@ -474,19 +512,19 @@ mod tests {
         assert_eq!(result.warnings.len(), 2);
         assert!(matches!(
             &result.warnings[0],
-            DepartureWarning::ApiLimitTruncated {
+            DepartureWarning::ApiLimitReached {
                 boarding_point_name,
                 count: 2,
-                covered_minutes: 25,
+                latest_departure_minutes: 25,
                 ..
             } if boarding_point_name == "First"
         ));
         assert!(matches!(
             &result.warnings[1],
-            DepartureWarning::ApiLimitTruncated {
+            DepartureWarning::ApiLimitReached {
                 boarding_point_name,
                 count: 2,
-                covered_minutes: 35,
+                latest_departure_minutes: 35,
                 ..
             } if boarding_point_name == "Second"
         ));
