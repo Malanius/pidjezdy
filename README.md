@@ -154,13 +154,18 @@ one frequent route to take every slot.
 PID applies `fetch.api_limit` to each boarding-point group before `pidjezdy`
 filters lines and directions. When a live group returns the full API limit but
 still cannot fill the requested display slots, the CLI warns on stderr with
-the affected point and the portion of the requested time window represented:
+the affected point and the time until its latest returned departure:
 
 ```text
-pidjezdy: warning: "Nearby stop" hit the 20-departure API limit, covering only the next 27 of 120 requested minutes; matching departures beyond that are not visible
+pidjezdy: warning: "Nearby stop" returned the 20-departure API limit; later matching departures may be missing. Latest returned departure is in 27 min; requested window is 120 min
 ```
 
-No truncation warning is emitted when the requested result count was filled or
+Returning exactly the API limit does not prove that PID omitted departures.
+The warning deliberately accepts this ambiguity: a complete response containing
+exactly that many departures can also trigger it. The latest departure time is
+context only, not proof that the requested window is complete or incomplete.
+
+No API-limit warning is emitted when the requested result count was filled or
 when departures came from stale cache data. Multiple platform IDs inside one
 boarding point share its API budget. If that hides later matching services,
 splitting the platforms into separate boarding points gives each its own
